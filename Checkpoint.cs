@@ -23,8 +23,6 @@ namespace TranslationTools {
 		private const string CompilerVersionName = "CompilerVersion";
 		private const string WarningName = "Warning";
 		private const string GameFolderName = "GameFolder";
-		private const string LauncherName = "Launcher";
-		private const string LauncherArgumentsName = "LauncherArguments";
 
 		/// <summary>The BuildMode value meaning "none recorded".</summary>
 		public const int NoBuildMode = -1;
@@ -80,12 +78,8 @@ namespace TranslationTools {
 						checkpoint.GameFolder = value;
 						known = true;
 					}
-					if (name == LauncherName) {
-						checkpoint.Launcher = value;
-						known = true;
-					}
-					if (name == LauncherArgumentsName) {
-						checkpoint.LauncherArguments = value;
+					if (name == "Launcher" || name == "LauncherArguments") {
+						// Older builds kept these here; they now live on the game install. Dropped.
 						known = true;
 					}
 					if (known == false) {
@@ -126,14 +120,8 @@ namespace TranslationTools {
 		/// <summary>A standing caution about this checkpoint, shown on its row until cleared. Empty when there is none.</summary>
 		public string Warning = "";
 
-		/// <summary>The installed game's folder - where its live archive and engine live. Empty until Run has asked.</summary>
+		/// <summary>The folder of the game install Run uses (see GameInstallList), which holds the launcher. Empty until Run has asked.</summary>
 		public string GameFolder = "";
-
-		/// <summary>The exe Run starts, inside GameFolder. Empty until Run has asked.</summary>
-		public string Launcher = "";
-
-		/// <summary>What Run passes the launcher on its command line, e.g. an engine name for a locale bypass. Empty for none.</summary>
-		public string LauncherArguments = "";
 
 		/// <summary>Whether a build mode has been recorded.</summary>
 		public bool HasBuildMode {
@@ -170,9 +158,7 @@ namespace TranslationTools {
 				+ BuildModeName + "=" + BuildMode + "\n"
 				+ CompilerVersionName + "=" + CompilerVersion + "\n"
 				+ WarningName + "=" + Warning + "\n"
-				+ GameFolderName + "=" + GameFolder + "\n"
-				+ LauncherName + "=" + Launcher + "\n"
-				+ LauncherArgumentsName + "=" + LauncherArguments;
+				+ GameFolderName + "=" + GameFolder;
 			foreach (string line in UnknownLines) {
 				encoded += "\n" + line;
 			}

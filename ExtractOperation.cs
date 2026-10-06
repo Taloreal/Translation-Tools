@@ -18,7 +18,8 @@ namespace TranslationTools {
 		/// Runs Extract on the selected checkpoint, printing as it goes. Always pauses at the
 		/// end so the result stays on screen.
 		/// </summary>
-		public static void Run() {
+		/// <param name="startOver">True to discard an existing split (after offering a backup) instead of refusing.</param>
+		public static void Run(bool startOver) {
 			Checkpoint? checkpoint = CheckpointList.Selected();
 			string problem = "";
 			if (checkpoint == null) {
@@ -36,14 +37,19 @@ namespace TranslationTools {
 				if (state.Form == CheckpointForm.Invalid) {
 					problem = "\"" + checkpoint.Label + "\" is invalid: " + state.Reason;
 				}
-				if (problem.Length == 0 && state.Form == CheckpointForm.Split) {
-					problem = "\"" + checkpoint.Label + "\" is already split. Extracting again would orphan the split; remove split\\ first if you mean to start over.";
+				if (problem.Length == 0 && state.Form == CheckpointForm.Split && startOver == false) {
+					problem = "\"" + checkpoint.Label + "\" is already split. Extracting again would orphan the split. Turn on start over (Left or Right on Extract) to discard it.";
 				}
 			}
 
 			bool proceed = problem.Length == 0;
-			if (proceed == true) {
-				proceed = ClearExtractFolder(folder, state);
+			if (proceed == true && state.Form == CheckpointForm.Split) {
+				proceed = FolderClearing.ClearWithChoice(folder, new string[] { CheckpointInspector.SplitFolder, CheckpointInspector.ExtractFolder },
+					"Start over discards split\\ - your edits - and extract\\, then extracts the master afresh.", "startover");
+			}
+			if (proceed == true && state.Form != CheckpointForm.Split) {
+				proceed = FolderClearing.ClearWithChoice(folder, new string[] { CheckpointInspector.ExtractFolder },
+					"extract\\ already holds the sources Join writes to. Extracting again replaces them.", "extract");
 			}
 			if (proceed == true && state.Engine == CheckpointEngine.NScripter) {
 				problem = ExtractNscripter(folder);
@@ -56,92 +62,14 @@ namespace TranslationTools {
 				Console.WriteLine(problem);
 				CheckpointLog.Error(folder, "Extract", problem);
 			}
+			if (problem.Length == 0 && proceed == false) {
+				Console.WriteLine("Cancelled. Nothing was changed.");
+			}
 			if (problem.Length == 0 && proceed == true) {
 				Console.WriteLine("Extracted into " + Path.Combine(folder, CheckpointInspector.ExtractFolder));
 			}
 			CheckpointWatch.MarkStale();
 			ConsoleExt.WaitForEnter("continue");
-		}
-
-
-		/// <summary>
-		/// Makes sure extract\ is empty before extraction. A populated one is the sources
-		/// Join writes to, so the user chooses: back it up to backups\, overwrite it, or
-		/// cancel.
-		/// </summary>
-		/// <returns>True to go on; false when the user cancelled or the backup failed.</returns>
-		private static bool ClearExtractFolder(string folder, CheckpointState state) {
-			bool proceed = true;
-			string extract = Path.Combine(folder, CheckpointInspector.ExtractFolder);
-			bool populated = Directory.Exists(extract) == true && Directory.EnumerateFileSystemEntries(extract).GetEnumerator().MoveNext() == true;
-			if (populated == true) {
-				ConsoleSelectMenu menu = new(loops: false, numbered: false, clearOnRefresh: true);
-				menu.SetPreChoiceText("extract\\ already holds the sources Join writes to. Extracting again replaces them.");
-				menu.AddChoice(new ConsoleMenuItem("Back it up to backups\\ first, then extract"));
-				menu.AddChoice(new ConsoleMenuItem("Overwrite it"));
-				menu.AddChoice(new ConsoleMenuItem("Cancel"));
-				int choice = menu.GetChoice();
-				// extract\ itself stays: a watcher sits on it, and a watched folder that is
-				// deleted or moved hangs in Windows' delete-pending state, refusing everyone.
-				// Only what is inside goes, with the watcher told to ignore the burst.
-				if (choice == 0) {
-					string backup = Path.Combine(folder, CheckpointInspector.BackupsFolder, "extract_" + DateTime.Now.ToString("yyyyMMdd_HHmmss"));
-					CheckpointWatch.Ignoring = true;
-					try {
-						Directory.CreateDirectory(backup);
-						MoveContents(extract, backup);
-						Console.WriteLine("Backed up to " + backup);
-					}
-					catch (Exception exception) {
-						Console.WriteLine("Could not back up extract\\: " + exception.Message + " What was moved so far is in " + backup);
-						proceed = false;
-					}
-					CheckpointWatch.Ignoring = false;
-				}
-				if (choice == 1) {
-					CheckpointWatch.Ignoring = true;
-					try {
-						DeleteContents(extract);
-					}
-					catch (Exception exception) {
-						Console.WriteLine("Could not clear extract\\: " + exception.Message);
-						proceed = false;
-					}
-					CheckpointWatch.Ignoring = false;
-				}
-				if (choice != 0 && choice != 1) {
-					Console.WriteLine("Cancelled. Nothing was changed.");
-					proceed = false;
-				}
-			}
-			return proceed;
-		}
-
-
-		/// <summary>
-		/// Moves every file and folder inside one folder into another, leaving the first
-		/// folder itself in place.
-		/// </summary>
-		private static void MoveContents(string from, string to) {
-			foreach (string file in Directory.GetFiles(from)) {
-				File.Move(file, Path.Combine(to, Path.GetFileName(file)));
-			}
-			foreach (string directory in Directory.GetDirectories(from)) {
-				Directory.Move(directory, Path.Combine(to, Path.GetFileName(directory)));
-			}
-		}
-
-
-		/// <summary>
-		/// Deletes every file and folder inside a folder, leaving the folder itself in place.
-		/// </summary>
-		private static void DeleteContents(string folder) {
-			foreach (string file in Directory.GetFiles(folder)) {
-				File.Delete(file);
-			}
-			foreach (string directory in Directory.GetDirectories(folder)) {
-				Directory.Delete(directory, true);
-			}
 		}
 
 

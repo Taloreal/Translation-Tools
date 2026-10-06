@@ -7,9 +7,10 @@ namespace TranslationTools {
 
 	/// <summary>
 	/// Run: installs the checkpoint's master into the game and starts the game. The live
-	/// archive is backed up into the checkpoint's backups\ first, every time. The game
-	/// folder and launcher are asked for once and recorded on the checkpoint; Run is gated
-	/// on that folder holding the engine's start-up files beside the archive.
+	/// archive is backed up into the checkpoint's backups\ first, every time. The checkpoint
+	/// points at one of the game installs this machine knows (GameInstallList), which holds
+	/// the launcher; Run asks for one the first time, and is gated on that folder holding
+	/// the engine's start-up files beside the archive.
 	/// </summary>
 	public static class RunOperation {
 
@@ -48,19 +49,16 @@ namespace TranslationTools {
 			}
 
 			GameLocation? game = null;
+			GameInstall? install = null;
 			if (problem.Length == 0) {
-				game = EnsureGameFolder(checkpoint!, state.Engine, out problem);
-			}
-			string launcher = "";
-			if (problem.Length == 0) {
-				launcher = EnsureLauncher(checkpoint!, game!, out problem);
+				install = EnsureInstall(checkpoint!, state.Engine, out game, out problem);
 			}
 
 			if (problem.Length == 0) {
 				problem = Install(folder, master, game!);
 			}
 			if (problem.Length == 0) {
-				problem = Launch(checkpoint!.GameFolder, launcher, checkpoint.LauncherArguments);
+				problem = Launch(install!.Folder, install.Launcher, install.Arguments);
 			}
 
 			if (problem.Length > 0) {
@@ -75,58 +73,148 @@ namespace TranslationTools {
 
 
 		/// <summary>
-		/// The recorded game folder, or asks for one and records it. The folder must hold the
-		/// engine's start-up files beside the live archive, and the archive must be the
-		/// checkpoint's engine.
+		/// The install the checkpoint points at, or asks for one: a saved install of this
+		/// engine, or a new folder, which is inspected, given a launcher, and saved to the
+		/// list. The pointer is recorded on the checkpoint either way.
 		/// </summary>
-		private static GameLocation? EnsureGameFolder(Checkpoint checkpoint, CheckpointEngine engine, out string problem) {
+		private static GameInstall? EnsureInstall(Checkpoint checkpoint, CheckpointEngine engine, out GameLocation? game, out string problem) {
 			problem = "";
-			GameLocation? game = null;
-			string folder = checkpoint.GameFolder;
-			if (folder.Length == 0) {
-				Console.WriteLine("Run needs the installed game's folder: where its " + MasterName(engine) + " and engine live.");
-				folder = ConsoleExt.ReadLine("Game folder (blank to cancel): ", -1, false).Trim().Trim('"');
-				if (folder.Length == 0) {
-					problem = "Cancelled. Nothing was changed.";
+			game = null;
+			GameInstall? install = null;
+			if (checkpoint.GameFolder.Length > 0) {
+				install = GameInstallList.Find(checkpoint.GameFolder);
+				if (install != null) {
+					game = Runnable(install.Folder, engine, out string why);
+					if (game == null) {
+						Console.WriteLine("The recorded game install cannot be used: " + why);
+						install = null;
+					}
 				}
-			}
-			if (problem.Length == 0) {
-				GameLocation found = GameLocation.Inspect(folder);
-				// An NScripter folder with no engine of its own is still runnable through the
-				// bundled one, as long as the script is there.
-				bool runnableThroughBundle = found.Engine == CheckpointEngine.NScripter
-					&& found.Archive.Length > 0 && BundledEngine.Available == true;
-				if (found.IsGame == false && runnableThroughBundle == false) {
-					problem = "That is not a runnable game folder: " + found.Reason + ".";
-				}
-				if (problem.Length == 0 && found.Engine != engine) {
-					problem = "That game is " + EngineWord(found.Engine) + "; this checkpoint is " + EngineWord(engine) + ".";
-				}
-				if (problem.Length == 0) {
-					game = found;
-					if (string.Equals(checkpoint.GameFolder, folder, StringComparison.OrdinalIgnoreCase) == false) {
-						Checkpoint updated = checkpoint;
-						updated.GameFolder = Path.GetFullPath(folder).TrimEnd('\\');
-						CheckpointList.Update(checkpoint.Label, updated);
+				if (install != null && File.Exists(install.Launcher) == false) {
+					Console.WriteLine("The recorded launcher is gone: " + install.Launcher);
+					problem = ChooseLauncher(install, game!);
+					if (problem.Length == 0) {
+						GameInstallList.Put(install);
 					}
 				}
 			}
-			return game;
+			if (problem.Length == 0 && install == null) {
+				install = PickInstall(engine, out game, out problem);
+			}
+			if (problem.Length == 0 && install != null && GameInstall.SameFolder(checkpoint.GameFolder, install.Folder) == false) {
+				checkpoint.GameFolder = install.Folder;
+				CheckpointList.Update(checkpoint.Label, checkpoint);
+			}
+			return install;
 		}
 
 
 		/// <summary>
-		/// The recorded launcher, or asks which exe starts the game when there is more than
-		/// one, and records it.
+		/// Offers the saved installs that currently run this engine, then "another folder".
 		/// </summary>
-		private static string EnsureLauncher(Checkpoint checkpoint, GameLocation game, out string problem) {
+		private static GameInstall? PickInstall(CheckpointEngine engine, out GameLocation? game, out string problem) {
 			problem = "";
-			string launcher = checkpoint.Launcher;
-			if (launcher.Length > 0 && File.Exists(launcher) == false) {
-				launcher = "";
+			game = null;
+			GameInstall? picked = null;
+			List<GameInstall> usable = new();
+			List<GameLocation> locations = new();
+			foreach (GameInstall saved in GameInstallList.All()) {
+				GameLocation? location = Runnable(saved.Folder, engine, out string why);
+				if (location != null) {
+					usable.Add(saved);
+					locations.Add(location);
+				}
 			}
+			int choice = usable.Count;
+			if (usable.Count > 0) {
+				ConsoleSelectMenu menu = new(loops: false, numbered: false, clearOnRefresh: true);
+				menu.SetPreChoiceText("Which installed game should this checkpoint run in?");
+				foreach (GameInstall saved in usable) {
+					menu.AddChoice(new ConsoleMenuItem(saved.Name + "   " + saved.Folder));
+				}
+				menu.AddChoice(new ConsoleMenuItem("Another folder..."));
+				menu.AddChoice(new ConsoleMenuItem("Cancel"));
+				choice = menu.GetChoice();
+			}
+			if (choice >= 0 && choice < usable.Count) {
+				picked = usable[choice];
+				game = locations[choice];
+			}
+			if (choice == usable.Count) {
+				picked = AddInstall(engine, out game, out problem);
+			}
+			if (choice > usable.Count || choice < 0) {
+				problem = "Cancelled. Nothing was changed.";
+			}
+			return picked;
+		}
 
-			// The choices: the bundled engine first for NScripter, then every exe in the folder.
+
+		/// <summary>
+		/// Asks for a game folder, checks it runs this engine, settles its launcher, and
+		/// saves it to the list.
+		/// </summary>
+		private static GameInstall? AddInstall(CheckpointEngine engine, out GameLocation? game, out string problem) {
+			problem = "";
+			game = null;
+			GameInstall? install = null;
+			Console.WriteLine("Run needs the installed game's folder: where its " + MasterName(engine) + " and engine live.");
+			string folder = ConsoleExt.ReadLine("Game folder (blank to cancel): ", -1, false).Trim().Trim('"');
+			if (folder.Length == 0) {
+				problem = "Cancelled. Nothing was changed.";
+			}
+			if (problem.Length == 0) {
+				game = Runnable(folder, engine, out string why);
+				if (game == null) {
+					problem = why;
+				}
+			}
+			if (problem.Length == 0) {
+				install = new GameInstall();
+				install.Folder = Path.GetFullPath(folder).TrimEnd('\\');
+				problem = ChooseLauncher(install, game!);
+			}
+			if (problem.Length == 0) {
+				GameInstallList.Put(install!);
+			}
+			if (problem.Length > 0) {
+				install = null;
+			}
+			return install;
+		}
+
+
+		/// <summary>
+		/// Inspects a folder as a game of one engine. An NScripter folder with no engine of
+		/// its own is still runnable through the bundled one, as long as the script is there.
+		/// </summary>
+		/// <returns>The location, or null with why in the out parameter.</returns>
+		private static GameLocation? Runnable(string folder, CheckpointEngine engine, out string why) {
+			why = "";
+			GameLocation found = GameLocation.Inspect(folder);
+			bool runnableThroughBundle = found.Engine == CheckpointEngine.NScripter
+				&& found.Archive.Length > 0 && BundledEngine.Available == true;
+			if (found.IsGame == false && runnableThroughBundle == false) {
+				why = "not a runnable game folder: " + found.Reason + ".";
+			}
+			if (why.Length == 0 && found.Engine != engine) {
+				why = "that game is " + EngineWord(found.Engine) + "; this checkpoint is " + EngineWord(engine) + ".";
+			}
+			GameLocation? location = null;
+			if (why.Length == 0) {
+				location = found;
+			}
+			return location;
+		}
+
+
+		/// <summary>
+		/// Settles an install's launcher: the bundled engine first for NScripter, then every
+		/// exe in the folder; asks when there is more than one, and asks once what to pass it.
+		/// </summary>
+		/// <returns>Empty on success, otherwise a plain sentence.</returns>
+		public static string ChooseLauncher(GameInstall install, GameLocation game) {
+			string problem = "";
 			List<string> candidates = new();
 			List<string> labels = new();
 			if (game.Engine == CheckpointEngine.NScripter && BundledEngine.Available == true) {
@@ -138,12 +226,13 @@ namespace TranslationTools {
 				labels.Add(Path.GetFileName(exe));
 			}
 
-			if (launcher.Length == 0 && candidates.Count == 1) {
+			string launcher = "";
+			if (candidates.Count == 1) {
 				launcher = candidates[0];
 			}
-			if (launcher.Length == 0 && candidates.Count > 1) {
+			if (candidates.Count > 1) {
 				ConsoleSelectMenu menu = new(loops: false, numbered: false, clearOnRefresh: true);
-				menu.SetPreChoiceText("What starts the game?");
+				menu.SetPreChoiceText("What starts the game in " + install.Folder + "?");
 				foreach (string label in labels) {
 					menu.AddChoice(new ConsoleMenuItem(label));
 				}
@@ -156,27 +245,23 @@ namespace TranslationTools {
 					problem = "Cancelled. Nothing was changed.";
 				}
 			}
-			if (launcher.Length == 0 && candidates.Count == 0) {
+			if (candidates.Count == 0) {
 				problem = "Nothing can start this game: no exe in its folder and no bundled engine.";
 			}
-			if (problem.Length == 0 && string.Equals(checkpoint.Launcher, launcher, StringComparison.OrdinalIgnoreCase) == false) {
-				// A new launcher: ask once what to pass it. A locale bypass, for instance,
-				// takes the engine's exe name; most launchers take nothing. The bundled
-				// engine takes nothing: it reads the game from its working directory.
+			if (problem.Length == 0) {
+				// A locale bypass, for instance, takes the engine's exe name; most launchers
+				// take nothing. The bundled engine takes nothing: it reads the game from its
+				// working directory.
 				string arguments = "";
 				bool bundled = string.Equals(launcher, BundledEngine.ExePath, StringComparison.OrdinalIgnoreCase);
 				if (bundled == false) {
 					Console.WriteLine("Launcher: " + Path.GetFileName(launcher));
 					arguments = ConsoleExt.ReadLine("Arguments to pass it, if any (blank for none): ", -1, false).Trim();
 				}
-				Checkpoint updated = checkpoint;
-				updated.Launcher = launcher;
-				updated.LauncherArguments = arguments;
-				CheckpointList.Update(checkpoint.Label, updated);
-				checkpoint.Launcher = launcher;
-				checkpoint.LauncherArguments = arguments;
+				install.Launcher = launcher;
+				install.Arguments = arguments;
 			}
-			return launcher;
+			return problem;
 		}
 
 

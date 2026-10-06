@@ -24,6 +24,7 @@ namespace TranslationTools {
 			menu.AddChoice(RootItem.SetActionOnSelect(SetCheckpointsRoot));
 			menu.AddChoice(ReportingItem.SetActionOnSelect(ToggleReporting));
 			menu.AddChoice(ServiceItem.SetActionOnSelect(SetServiceAddress));
+			menu.AddChoice(new ConsoleMenuItem("Game installs...").SetActionOnSelect(GameInstallsMenu.Show));
 			menu.AddChoice(new ConsoleMenuItem("Back"));
 			menu.GetChoice();
 		}

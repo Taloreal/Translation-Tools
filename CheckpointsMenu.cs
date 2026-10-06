@@ -28,8 +28,143 @@ namespace TranslationTools {
 			menu.AddChoice(new ConsoleMenuItem("Re-point this path").SetActionOnSelect(RepointPath));
 			menu.AddChoice(LockItem.SetActionOnSelect(ToggleLock));
 			menu.AddChoice(new ConsoleMenuItem("Remove this checkpoint").SetActionOnSelect(RemoveCheckpoint));
+			menu.AddChoice(new ConsoleMenuItem("Fork this checkpoint").SetActionOnSelect(ForkCheckpoint));
+			menu.AddChoice(new ConsoleMenuItem("Open this checkpoint in Explorer").SetActionOnSelect(OpenInExplorer));
 			menu.AddChoice(new ConsoleMenuItem("Back"));
 			menu.GetChoice();
+		}
+
+
+		/// <summary>
+		/// Copies the selected checkpoint into a new one under the checkpoints folder: the
+		/// master, extract\, split\, and the info, hashes and log files, but not backups\.
+		/// The copy is writable, selected, and carries the source's recorded build mode,
+		/// compiler version, warning and game install. The source is not changed, so a
+		/// locked or invalid one forks too. Both logs record the fork.
+		/// </summary>
+		private static void ForkCheckpoint() {
+			Checkpoint? source = CheckpointList.Selected();
+			string problem = "";
+			if (source == null) {
+				problem = "No checkpoint is selected.";
+			}
+			string sourceFolder = "";
+			if (problem.Length == 0) {
+				sourceFolder = CheckpointInspector.FolderOf(source!.Path);
+				if (sourceFolder.Length == 0 || Directory.Exists(sourceFolder) == false) {
+					problem = "The folder is missing: " + source.Path;
+				}
+			}
+			string label = "";
+			if (problem.Length == 0) {
+				label = ConsoleExt.ReadLine("Label for the fork of \"" + source!.Label + "\" (blank to cancel): ", -1, false).Trim();
+				if (label.Length == 0) {
+					problem = "Cancelled. Nothing forked.";
+				}
+			}
+			if (problem.Length == 0 && Checkpoint.IsStorable(label) == false) {
+				problem = "That label cannot be stored.";
+			}
+			if (problem.Length == 0 && CheckpointList.Find(label) != null) {
+				problem = "A checkpoint is already labelled \"" + label + "\".";
+			}
+			string destination = "";
+			if (problem.Length == 0) {
+				destination = CheckpointsRoot.FolderFor(label, out string rootProblem);
+				if (destination.Length == 0) {
+					problem = rootProblem;
+				}
+			}
+			if (problem.Length == 0 && Directory.Exists(destination) == true && Directory.EnumerateFileSystemEntries(destination).GetEnumerator().MoveNext() == true) {
+				problem = destination + " already has files in it.";
+			}
+			if (problem.Length == 0) {
+				try {
+					CopyCheckpointContents(sourceFolder, destination);
+					Checkpoint fork = new();
+					fork.Label = label;
+					fork.Path = Path.GetFullPath(destination).TrimEnd('\\');
+					fork.Writable = true;
+					fork.BuildMode = source!.BuildMode;
+					fork.CompilerVersion = source.CompilerVersion;
+					fork.Warning = source.Warning;
+					fork.GameFolder = source.GameFolder;
+					CheckpointList.Add(fork);
+					CheckpointLog.Warning(sourceFolder, "Fork", "forked to \"" + label + "\" at " + fork.Path);
+					CheckpointLog.Warning(destination, "Fork", "forked from \"" + source.Label + "\" at " + sourceFolder);
+					ProbeAllRows();
+					Console.WriteLine("Forked to \"" + label + "\" at " + fork.Path + " and selected it (writable).");
+				}
+				catch (Exception exception) {
+					problem = "Could not fork: " + exception.Message + " What was copied so far is at " + destination;
+				}
+			}
+			if (problem.Length > 0) {
+				Console.WriteLine(problem);
+			}
+			ConsoleExt.WaitForEnter("continue");
+		}
+
+
+		/// <summary>
+		/// Copies what makes a checkpoint - the top-level files and the extract\ and split\
+		/// trees - into a new folder. backups\ stays behind.
+		/// </summary>
+		private static void CopyCheckpointContents(string sourceFolder, string destination) {
+			Directory.CreateDirectory(destination);
+			foreach (string file in Directory.GetFiles(sourceFolder)) {
+				File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), false);
+			}
+			string[] trees = new string[] { CheckpointInspector.ExtractFolder, CheckpointInspector.SplitFolder };
+			foreach (string tree in trees) {
+				string from = Path.Combine(sourceFolder, tree);
+				if (Directory.Exists(from) == true) {
+					CopyTree(from, Path.Combine(destination, tree));
+				}
+			}
+		}
+
+
+		/// <summary>
+		/// Copies a folder and everything under it.
+		/// </summary>
+		private static void CopyTree(string from, string to) {
+			Directory.CreateDirectory(to);
+			foreach (string file in Directory.GetFiles(from)) {
+				File.Copy(file, Path.Combine(to, Path.GetFileName(file)), false);
+			}
+			foreach (string directory in Directory.GetDirectories(from)) {
+				CopyTree(directory, Path.Combine(to, Path.GetFileName(directory)));
+			}
+		}
+
+
+		/// <summary>
+		/// Opens the selected checkpoint's folder in Windows Explorer. A path whose folder is
+		/// gone is said so, not opened.
+		/// </summary>
+		private static void OpenInExplorer() {
+			Checkpoint? selected = CheckpointList.Selected();
+			string problem = "No checkpoint is selected.";
+			if (selected != null) {
+				string folder = CheckpointInspector.FolderOf(selected.Path);
+				problem = "The folder is missing: " + selected.Path;
+				if (folder.Length > 0 && Directory.Exists(folder) == true) {
+					problem = "";
+					try {
+						System.Diagnostics.ProcessStartInfo start = new("explorer.exe", "\"" + folder + "\"");
+						start.UseShellExecute = true;
+						System.Diagnostics.Process.Start(start);
+					}
+					catch (Exception exception) {
+						problem = "Could not open Explorer: " + exception.Message;
+					}
+				}
+			}
+			if (problem.Length > 0) {
+				Console.WriteLine(problem);
+				ConsoleExt.WaitForEnter("continue");
+			}
 		}
 
 

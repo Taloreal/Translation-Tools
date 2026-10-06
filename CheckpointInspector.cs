@@ -148,7 +148,7 @@ namespace TranslationTools {
 			string extract = Path.Combine(folder, ExtractFolder);
 			string split = Path.Combine(folder, SplitFolder);
 			bool hasExtract = Directory.Exists(extract);
-			bool hasSplit = Directory.Exists(split);
+			bool hasSplit = Directory.Exists(split) == true && FolderIsEmpty(split) == false;
 			bool extractHasSources = hasExtract == true && FolderHoldsExtension(extract, ".ss") == true;
 			bool extractHasNscripter = hasExtract == true && FolderHoldsNscripterFiles(extract) == true;
 			bool splitHasSources = hasSplit == true && FolderHoldsExtension(split, ".ss") == true;
@@ -193,7 +193,7 @@ namespace TranslationTools {
 			string extract = Path.Combine(folder, ExtractFolder);
 			string split = Path.Combine(folder, SplitFolder);
 			bool hasExtract = Directory.Exists(extract);
-			bool hasSplit = Directory.Exists(split);
+			bool hasSplit = Directory.Exists(split) == true && FolderIsEmpty(split) == false;
 			bool extractHasScript = hasExtract == true && File.Exists(Path.Combine(extract, NscripterScript)) == true;
 			bool siglusFiles = (hasExtract == true && FolderHoldsExtension(extract, ".ss") == true)
 				|| (hasSplit == true && FolderHoldsExtension(split, ".ss") == true);

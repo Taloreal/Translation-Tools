@@ -6,9 +6,9 @@ namespace TranslationTools {
 
 	/// <summary>
 	/// Recover: puts back a rebuildable piece of an NScripter checkpoint. nscript.dat is
-	/// rebuilt from extract\0.txt; 0.txt is rebuilt from a complete split by Join, which is
-	/// not built yet. A successful recovery unlocks the checkpoint again, since the lock was
-	/// only ever there to make recovery come first.
+	/// rebuilt from extract\0.txt; 0.txt is rebuilt from a complete split by Join. A
+	/// successful recovery unlocks the checkpoint again, since the lock was only ever there
+	/// to make recovery come first.
 	/// </summary>
 	public static class RecoverOperation {
 
@@ -57,7 +57,11 @@ namespace TranslationTools {
 				bool scriptMissing = File.Exists(script) == false;
 
 				if (scriptMissing == true) {
-					problem = "0.txt has to be rebuilt from the split by Join, which is not built yet.";
+					// The inspector only flags this when the split is complete.
+					problem = JoinOperation.JoinNscripter(folder, Console.WriteLine);
+					if (problem.Length == 0) {
+						CheckpointLog.Warning(folder, "Recovery", "rebuilt " + NScriptArchive.ScriptName + " from the split");
+					}
 				}
 				if (problem.Length == 0 && masterMissing == true) {
 					problem = NScriptArchive.EncodeFile(script, master);
