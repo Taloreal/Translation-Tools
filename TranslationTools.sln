@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37301.10 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TranslationTools", "TranslationTools.csproj", "{BE42D82E-73AF-40B9-A9B3-62B36743AB4F}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "TALOREAL_NETCORE_API", "..\..\NScripter Tools\ETP TOOLS\TALOREAL_NETCORE_API\TALOREAL_NETCORE_API.csproj", "{A2DFC5D5-3F7E-2A1D-4EB8-95C544104289}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BE42D82E-73AF-40B9-A9B3-62B36743AB4F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BE42D82E-73AF-40B9-A9B3-62B36743AB4F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BE42D82E-73AF-40B9-A9B3-62B36743AB4F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BE42D82E-73AF-40B9-A9B3-62B36743AB4F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A2DFC5D5-3F7E-2A1D-4EB8-95C544104289}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A2DFC5D5-3F7E-2A1D-4EB8-95C544104289}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A2DFC5D5-3F7E-2A1D-4EB8-95C544104289}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A2DFC5D5-3F7E-2A1D-4EB8-95C544104289}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {1EC6D8A1-FF8D-4072-B54D-EC6EF76CF3EF}
+	EndGlobalSection
+EndGlobal

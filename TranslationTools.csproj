@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\NScripter Tools\ETP TOOLS\TALOREAL_NETCORE_API\TALOREAL_NETCORE_API.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The compiler installer ships beside the exe so the tool can run it on a fresh machine. -->
+    <None Include="Scripts\Update-SiglusSsu.ps1" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Scripts\Update-SiglusSsu.bat" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The bundled NScripter engine (ONScripter-EN, GPL) ships beside the exe, with its license. -->
+    <None Include="Tools\ONScripter\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

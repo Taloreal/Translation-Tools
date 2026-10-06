@@ -1,0 +1,17 @@
+bin/
+obj/
+.vs/
+*.user
+
+# The report-signing key is compiled in but never committed. Copy
+# Secrets.cs.sample to Secrets.cs and fill it in.
+Secrets.cs
+
+# The web service lives on the server only; none of it is published.
+Web/
+
+# Script run logs
+Scripts/*.log
+
+# Visual Studio drops Azure boilerplate here; not part of the tool.
+.github/
