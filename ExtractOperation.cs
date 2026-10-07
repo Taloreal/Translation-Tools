@@ -53,6 +53,9 @@ namespace TranslationTools {
 			}
 			if (proceed == true && state.Engine == CheckpointEngine.NScripter) {
 				problem = ExtractNscripter(folder);
+				if (problem.Length == 0) {
+					EnsureGameRecorded(checkpoint!, folder);
+				}
 			}
 			if (proceed == true && state.Engine == CheckpointEngine.Siglus) {
 				problem = ExtractSiglus(checkpoint!, folder);
@@ -70,6 +73,65 @@ namespace TranslationTools {
 			}
 			CheckpointWatch.MarkStale();
 			ConsoleExt.WaitForEnter("continue");
+		}
+
+
+		/// <summary>
+		/// NScripter: the game is asked once per checkpoint too, so the glossary and anything
+		/// else that keys on the game has one. No known-game suggestion: nothing fingerprints
+		/// an NScripter master. Then a same-game glossary is offered, if one exists.
+		/// </summary>
+		private static void EnsureGameRecorded(Checkpoint checkpoint, string folder) {
+			SetGame(checkpoint, folder, false);
+		}
+
+
+		/// <summary>
+		/// Records which game a checkpoint is: a Siglus master is fingerprinted first and a
+		/// known archive becomes the suggestion; then the game question, the same one Extract
+		/// asks. A new answer is written to checkpoint.info and a same-game glossary offered.
+		/// </summary>
+		/// <param name="checkpoint">The checkpoint.</param>
+		/// <param name="folder">Its folder.</param>
+		/// <param name="alwaysAsk">True to ask even when a game is recorded (the menu); false to ask only when none is.</param>
+		public static void SetGame(Checkpoint checkpoint, string folder, bool alwaysAsk) {
+			CheckpointInfo info = CheckpointInfo.Load(folder);
+			if (info.GameName.Length == 0 || alwaysAsk == true) {
+				if (info.GameName.Length > 0) {
+					Console.WriteLine("Game now: " + info.GameName);
+				}
+				KnownGame? suggestion = null;
+				string master = Path.Combine(folder, "Scene.pck");
+				if (File.Exists(master) == true) {
+					try {
+						Console.WriteLine("Reading the archive...");
+						KnownArchive? matched = BuildModeService.FindKnownArchiveByHashSet(BuildModeService.SegmentHashes(master), out suggestion, out int shared);
+						if (matched == null) {
+							matched = BuildModeService.FindKnownArchive(BuildModeService.Fingerprint(master), out suggestion);
+						}
+					}
+					catch (Exception) {
+						// An unreadable master just means no suggestion.
+					}
+				}
+				string name = AskGame(suggestion, out string vndbId);
+				if (name.Length > 0) {
+					info.GameName = name;
+					info.VndbId = vndbId;
+					if (info.VndbId.Length == 0) {
+						CheckpointLog.Warning(folder, "Game", "title not canonized: \"" + info.GameName + "\" has no VNDB id");
+					}
+					string saveProblem = info.Save(folder);
+					if (saveProblem.Length > 0) {
+						Console.WriteLine(saveProblem);
+						CheckpointLog.Warning(folder, "Game", saveProblem);
+					}
+					if (saveProblem.Length == 0) {
+						Console.WriteLine("Game: " + info.GameName + ".");
+						GlossariesMenu.OfferFromSameGame(checkpoint, folder, false);
+					}
+				}
+			}
 		}
 
 
@@ -135,6 +197,9 @@ namespace TranslationTools {
 					if (saveProblem.Length > 0) {
 						Console.WriteLine(saveProblem + " Extract will ask again next time.");
 						CheckpointLog.Warning(folder, "Extract", saveProblem);
+					}
+					if (saveProblem.Length == 0) {
+						GlossariesMenu.OfferFromSameGame(checkpoint, folder, false);
 					}
 				}
 			}

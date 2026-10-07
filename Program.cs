@@ -44,9 +44,10 @@ namespace TranslationTools {
 		private static void RunMainMenu() {
 			ConsoleSelectMenu menu = new(loops: true, numbered: false, clearOnRefresh: true);
 			menu.AddOnDrawMenuAction(RefreshHeader);
-			SelectorItem.AddOnKeyPressAction(CycleCheckpoint);
+			SelectorItem.AddOnKeyPressAction(SelectorRow.Cycle);
 			menu.AddChoice(SelectorItem.SetActionOnSelect(CheckpointsMenu.Show));
 			menu.AddChoice(new ConsoleMenuItem("Extract / Split / Join / Build").SetActionOnSelect(OperationsMenu.Show));
+			menu.AddChoice(new ConsoleMenuItem("Glossaries").SetActionOnSelect(GlossariesMenu.Show));
 			menu.AddChoice(new ConsoleMenuItem("Settings").SetActionOnSelect(SettingsMenu.Show));
 			menu.AddChoice(new ConsoleMenuItem("Exit"));
 			menu.GetChoice();
@@ -68,53 +69,7 @@ namespace TranslationTools {
 			}
 			menu.SetPreChoiceText(games + "\n");
 
-			Checkpoint? selected = CheckpointList.Selected();
-			CheckpointWatch.Focus(selected);
-			if (selected == null) {
-				SelectorItem.SetText("<- no checkpoints - press Enter to add one ->");
-			}
-			if (selected != null) {
-				int count = CheckpointList.All().Count;
-				string game = "";
-				CheckpointInfo info = CheckpointInfo.Load(CheckpointInspector.FolderOf(selected.Path), CheckpointWatch.State);
-				if (info.GameName.Length > 0) {
-					game = "  ·  " + info.GameName;
-				}
-				if (selected.Warning.Length > 0) {
-					game += "  ·  WARNING: " + selected.Warning;
-				}
-				SelectorItem.SetText("<- " + selected.Label
-					+ "  ·  " + CheckpointWatch.State.Describe()
-					+ game
-					+ "  ·  " + selected.StateWord
-					+ "   " + (IndexOfSelected() + 1) + "/" + count + " ->");
-			}
-		}
-
-
-		/// <summary>
-		/// Left and Right on the selector move the selection through the list.
-		/// </summary>
-		private static void CycleCheckpoint(ConsoleMenuItem? item, ConsoleKeyInfo key) {
-			if (key.Key == ConsoleKey.LeftArrow) {
-				CheckpointList.CycleSelection(-1);
-			}
-			if (key.Key == ConsoleKey.RightArrow) {
-				CheckpointList.CycleSelection(1);
-			}
-		}
-
-
-		private static int IndexOfSelected() {
-			int found = 0;
-			List<Checkpoint> all = CheckpointList.All();
-			string label = CheckpointList.SelectedLabel;
-			for (int index = 0; index < all.Count; index++) {
-				if (CheckpointList.SameLabel(all[index].Label, label) == true) {
-					found = index;
-				}
-			}
-			return found;
+			SelectorItem.SetText(SelectorRow.Text("<- no checkpoints - press Enter to add one ->"));
 		}
 	}
 }

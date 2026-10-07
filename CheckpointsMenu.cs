@@ -11,6 +11,7 @@ namespace TranslationTools {
 	public static class CheckpointsMenu {
 
 		private static readonly ConsoleMenuItem LockItem = new("Lock this checkpoint");
+		private static readonly ConsoleMenuItem SelectorItem = new("<- no checkpoints ->");
 
 		/// <summary>Every row's on-disk state, probed once when the menu opens and after an action changes the list.</summary>
 		private static readonly Dictionary<string, CheckpointState> RowStates = new(StringComparer.OrdinalIgnoreCase);
@@ -23,16 +24,43 @@ namespace TranslationTools {
 			ProbeAllRows();
 			ConsoleSelectMenu menu = new(loops: true, numbered: false, clearOnRefresh: true);
 			menu.AddOnDrawMenuAction(RefreshHeader);
+			SelectorItem.AddOnKeyPressAction(SelectorRow.Cycle);
+			menu.AddChoice(SelectorItem);
 			menu.AddChoice(new ConsoleMenuItem("Add a checkpoint").SetActionOnSelect(AddCheckpoint));
 			menu.AddChoice(new ConsoleMenuItem("Rename this label").SetActionOnSelect(RenameLabel));
 			menu.AddChoice(new ConsoleMenuItem("Re-point this path").SetActionOnSelect(RepointPath));
 			menu.AddChoice(LockItem.SetActionOnSelect(ToggleLock));
 			menu.AddChoice(new ConsoleMenuItem("Remove this checkpoint").SetActionOnSelect(RemoveCheckpoint));
+			menu.AddChoice(new ConsoleMenuItem("Set the game (detect or pick)").SetActionOnSelect(SetGame));
 			menu.AddChoice(new ConsoleMenuItem("Wrap width for Join (Siglus)").SetActionOnSelect(SetWrapColumn));
 			menu.AddChoice(new ConsoleMenuItem("Fork this checkpoint").SetActionOnSelect(ForkCheckpoint));
 			menu.AddChoice(new ConsoleMenuItem("Open this checkpoint in Explorer").SetActionOnSelect(OpenInExplorer));
 			menu.AddChoice(new ConsoleMenuItem("Back"));
 			menu.GetChoice();
+			SelectorItem.RemoveOnKeyPressAction(SelectorRow.Cycle);
+		}
+
+
+		/// <summary>
+		/// Records which game the selected checkpoint is, through the same detection and
+		/// question Extract uses. An invalid checkpoint has no info file to write.
+		/// </summary>
+		private static void SetGame() {
+			Checkpoint? selected = CheckpointList.Selected();
+			if (selected == null) {
+				Console.WriteLine("No checkpoint is selected.");
+			}
+			if (selected != null) {
+				string folder = CheckpointInspector.FolderOf(selected.Path);
+				CheckpointState state = CheckpointInspector.Inspect(selected.Path);
+				if (state.Form == CheckpointForm.Invalid) {
+					Console.WriteLine("\"" + selected.Label + "\" is invalid: " + state.Reason + ". Fix the folder first; an invalid checkpoint keeps no game.");
+				}
+				if (state.Form != CheckpointForm.Invalid) {
+					ExtractOperation.SetGame(selected, folder, true);
+				}
+			}
+			ConsoleExt.WaitForEnter("continue");
 		}
 
 
@@ -132,7 +160,7 @@ namespace TranslationTools {
 			foreach (string file in Directory.GetFiles(sourceFolder)) {
 				File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), false);
 			}
-			string[] trees = new string[] { CheckpointInspector.ExtractFolder, CheckpointInspector.SplitFolder };
+			string[] trees = new string[] { CheckpointInspector.ExtractFolder, CheckpointInspector.SplitFolder, Glossary.FolderName };
 			foreach (string tree in trees) {
 				string from = Path.Combine(sourceFolder, tree);
 				if (Directory.Exists(from) == true) {
@@ -190,6 +218,7 @@ namespace TranslationTools {
 		/// lock item for the action that applies.
 		/// </summary>
 		private static void RefreshHeader(ConsoleSelectMenu menu) {
+			SelectorItem.SetText(SelectorRow.Text("<- no checkpoints ->"));
 			Checkpoint? selected = CheckpointList.Selected();
 			CheckpointWatch.Focus(selected);
 			List<Checkpoint> all = CheckpointList.All();

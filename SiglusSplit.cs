@@ -77,7 +77,7 @@ namespace TranslationTools {
 		/// <param name="warnings">Everything worth telling the user that did not stop the split.</param>
 		/// <param name="onLine">Receives progress.</param>
 		/// <returns>Empty on success, otherwise a plain sentence.</returns>
-		public static string SplitFolder(string sourceFolder, string splitFolder, List<string> warnings, Action<string> onLine) {
+		public static string SplitFolder(string sourceFolder, string splitFolder, List<CharacterEntry> characters, List<string> warnings, Action<string> onLine) {
 			string problem = "";
 			if (Directory.Exists(sourceFolder) == false) {
 				problem = "Nothing to split: " + sourceFolder + " is missing.";
@@ -103,7 +103,7 @@ namespace TranslationTools {
 			while (problem.Length == 0 && at < scenes.Length) {
 				string name = Path.GetFileName(scenes[at]);
 				try {
-					SceneSplit split = SplitScene(SiglusScript.ReadScript(scenes[at]), name, versions);
+					SceneSplit split = SplitScene(SiglusScript.ReadScript(scenes[at]), name, versions, characters);
 					splits.Add(split);
 					names.Add(name);
 					foreach (string warning in split.Warnings) {
@@ -160,8 +160,9 @@ namespace TranslationTools {
 		/// <param name="scriptText">The whole .ss file's text.</param>
 		/// <param name="sceneName">The scene's file name, for versions and messages.</param>
 		/// <param name="versions">Label name to the versions seen so far, across the run.</param>
+		/// <param name="characters">Glossary characters whose quoted Japanese name is replaced by the English one.</param>
 		/// <returns>The working copy and the dialogue files it points at.</returns>
-		public static SceneSplit SplitScene(string scriptText, string sceneName, Dictionary<string, List<LabelVersion>> versions) {
+		public static SceneSplit SplitScene(string scriptText, string sceneName, Dictionary<string, List<LabelVersion>> versions, List<CharacterEntry> characters) {
 			SceneSplit output = new();
 			List<ScriptLine> lines = SeparateVoiceCalls(SiglusScript.ReadLines(scriptText), output.Warnings, out int separated);
 			if (separated > 0) {
@@ -170,6 +171,10 @@ namespace TranslationTools {
 			int quoted = QuoteBareText(lines, output.Warnings);
 			if (quoted > 0) {
 				output.Messages.Add(quoted + " line(s) had their nametag, dialogue or narration put in quotes so the engine can show them.");
+			}
+			int renamed = RenameSpeakers(lines, characters);
+			if (renamed > 0) {
+				output.Messages.Add(renamed + " speaker name(s) replaced by their English name from the glossary.");
 			}
 
 			// Pass 1 decides which labels own text, and collects each text-bearing region
@@ -433,6 +438,34 @@ namespace TranslationTools {
 				}
 			}
 			return changed;
+		}
+
+
+		/// <summary>
+		/// The third repair, after quoting: a quoted Japanese name that the glossary knows -
+		/// "竜臥" as a nametag reads 【"竜臥"】 - becomes the quoted English name, so the split
+		/// carries the names the translation uses. Only a whole quoted literal equal to the
+		/// name is replaced; a name inside a longer line of narration is left to the translator.
+		/// </summary>
+		/// <returns>How many replacements were made.</returns>
+		private static int RenameSpeakers(List<ScriptLine> lines, List<CharacterEntry> characters) {
+			int renamed = 0;
+			foreach (ScriptLine line in lines) {
+				foreach (CharacterEntry character in characters) {
+					bool usable = character.Jp.Length > 0 && character.En.Length > 0 && character.Jp != character.En;
+					if (usable == true) {
+						string wanted = "\"" + character.Jp + "\"";
+						string replacement = "\"" + character.En + "\"";
+						int at = line.Content.IndexOf(wanted, StringComparison.Ordinal);
+						while (at >= 0) {
+							line.Content = line.Content.Substring(0, at) + replacement + line.Content.Substring(at + wanted.Length);
+							renamed += 1;
+							at = line.Content.IndexOf(wanted, at + replacement.Length, StringComparison.Ordinal);
+						}
+					}
+				}
+			}
+			return renamed;
 		}
 
 

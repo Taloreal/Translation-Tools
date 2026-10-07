@@ -146,7 +146,8 @@ you can edit text without touching the script around it.
   An `nl` or `r` sitting between Japanese characters is the engine's line break or wait,
   and stays outside the quotes: `"left"nl"right"`. A character the original already had in
   quotes to keep the engine from obeying it, such as `"-"`, is folded into the quoted line
-  as plain text.
+  as plain text. Then any quoted name the checkpoint's glossary knows is replaced by its
+  English name, so `【"竜臥"】` becomes `【"Ryuuga"】`; the tool says how many it renamed.
   Lines already quoted are left as they are. An empty nametag or an unmatched bracket is
   reported and left alone. After the split it asks for a governing wrap width, see *Word
   wrap* below.
@@ -250,6 +251,10 @@ Press **Enter** on the selector line.
 - **Lock / Unlock this checkpoint** - a locked checkpoint is refused by every operation.
   A checkpoint that needs recovery cannot be unlocked by hand.
 - **Remove this checkpoint** - takes it off the list. The folder stays on disk.
+- **Set the game (detect or pick)** - records which game this checkpoint is, the same way
+  Extract does: a SiglusEngine master is recognised if the shared list knows it, then you
+  pick from the list or type a name, which is looked up so it is spelled the standard
+  way. Shows the current game first. An invalid checkpoint cannot hold one.
 - **Wrap width for Join (Siglus)** - the governing wrap width; see *Word wrap* in
   section 5. Blank keeps it, 0 clears it.
 - **Fork this checkpoint** - makes a copy under your checkpoints folder with a new label:
@@ -258,7 +263,55 @@ Press **Enter** on the selector line.
 - **Open this checkpoint in Explorer** - opens its folder.
 
 
-## 8. Settings
+## 8. Glossaries
+
+**Glossaries** on the main menu opens the selected checkpoint's glossary: the characters
+of the game and the rules the translation follows. Nothing uses them yet; they are the
+ground the editor and the translation pass will stand on.
+
+Each checkpoint has its own glossary, inside its folder:
+
+```
+MyCheckpoint\
+    glossary\
+        characters\
+            Ryuuga.txt         one file per character, named after the English name
+            ...
+        rules.txt              one rule per line, in the order they apply
+```
+
+Both are plain text you can edit by hand. A character file is named lines, then a
+`Profile:` line, then free lines to the end:
+
+```
+Jp=竜臥
+En=Ryuuga
+Aliases=Ryuu, big brother
+Role=the protagonist
+Notes=
+Profile:
+Speaks bluntly. Never uses honorifics with his sister.
+```
+
+- **Characters...** - list, add, change one field, remove.
+- **Translation rules...** - list, add, change, move up or down, remove. The list is
+  numbered; a rule is picked by its number.
+- **Copy this glossary to another checkpoint** - pick the target; its own glossary is
+  replaced after a question that says what it loses.
+- **Take the glossary from a checkpoint of the same game** - finds another checkpoint of
+  this game that has a glossary and copies it here, replacing this one. Choosing the item
+  is the choice; it asks nothing more, except which, if several qualify.
+
+Two checkpoints of the same game each keep their own copy; nothing is shared by
+reference, so a mistake in one never reaches the other. When a checkpoint first records
+its game, at Extract, and another checkpoint of that game already has a glossary, the
+tool offers to copy it. The same offer appears when Glossaries opens on a checkpoint with
+none. Fork copies the glossary with the rest.
+
+Extract asks the game on both engines now, so every checkpoint can carry one.
+
+
+## 9. Settings
 
 - **Checkpoints folder** - where new checkpoints made by Add and Fork go, one folder per
   label.
@@ -267,14 +320,15 @@ Press **Enter** on the selector line.
   the same archive skips the wait. What it sends: a fingerprint of the archive, its size,
   the game's name, the settings, and the compiler's version. No script text, no personal
   details. Off until you say yes.
-- **Build-mode service address** - where those reports go and come from. "Built-in"
-  restores the default.
+- **Build-mode service address** - where those reports go and come from. Shown as
+  `{DEFAULT}` while the built-in address is in use; the endpoint itself is not shown.
+  Choosing it opens a menu: use the built-in address, type a new one, or cancel.
 - **Game installs...** - every installed game the tool knows: its folder, what starts it,
   and which checkpoints use it. Change the starter program or its arguments, or remove an
   install; the checkpoints that used it will ask again.
 
 
-## 9. When something is wrong
+## 10. When something is wrong
 
 **The row says "invalid: ..."** The folder does not have the shape in section 2. The reason
 says what is off: both masters present, no master, an extra file at the top level, a split
@@ -293,7 +347,7 @@ file the tool replaced is there, named with the date and time.
 warning and error the tool raised about that checkpoint is in it, newest at the bottom.
 
 
-## 10. Not built yet
+## 11. Not built yet
 
 - The dialogue editor. Until it exists, edit the files under `split\dialogues\` with any
   text editor that saves Shift-JIS (code page 932) without a byte-order mark.

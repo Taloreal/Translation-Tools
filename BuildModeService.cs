@@ -45,6 +45,25 @@ namespace TranslationTools {
 		private static readonly HttpClient Client = new() { Timeout = TimeSpan.FromSeconds(30) };
 
 		/// <summary>Where the service lives: Secrets.ServiceUrl unless a Settings override is set.</summary>
+		/// <summary>True when no address has been set and the built-in one is in use.</summary>
+		public static bool UsingDefaultAddress {
+			get {
+				bool stored = Settings.GetValue(BaseUrlKey, out string? saved);
+				return stored == false || saved == null || saved.Trim().Length == 0;
+			}
+		}
+
+		/// <summary>The address the service is reached at. Shown to the user only as {DEFAULT} while the built-in one is in use; the endpoint itself stays out of sight.</summary>
+		public static string AddressForDisplay {
+			get {
+				string shown = "{DEFAULT}";
+				if (UsingDefaultAddress == false) {
+					shown = BaseUrl;
+				}
+				return shown;
+			}
+		}
+
 		public static string BaseUrl {
 			get {
 				string url = Secrets.ServiceUrl;

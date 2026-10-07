@@ -165,7 +165,7 @@ namespace TranslationTools {
 				List<string> warnings = new();
 				onLine("Splitting the scenes...");
 				CheckpointWatch.Ignoring = true;
-				problem = SiglusSplit.SplitFolder(extract, split, warnings, onLine);
+				problem = SiglusSplit.SplitFolder(extract, split, Glossary.Characters(folder), warnings, onLine);
 				CheckpointWatch.Ignoring = false;
 				foreach (string warning in warnings) {
 					onLine("Warning: " + warning);

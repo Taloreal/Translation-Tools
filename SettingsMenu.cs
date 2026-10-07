@@ -47,7 +47,7 @@ namespace TranslationTools {
 			}
 			RootItem.SetText("Checkpoints folder (new checkpoints go in <folder>\\<label>): " + root);
 			ReportingItem.SetText("Send build-mode reports: " + reporting);
-			ServiceItem.SetText("Build-mode service address: " + BuildModeService.BaseUrl);
+			ServiceItem.SetText("Build-mode service address: " + BuildModeService.AddressForDisplay);
 			menu.SetPreChoiceText("-- Settings --\n");
 		}
 
@@ -111,22 +111,28 @@ namespace TranslationTools {
 
 
 		/// <summary>
-		/// Overrides where the build-mode service is looked for; blank keeps the current
-		/// address, and the word "built-in" returns to the address compiled into the tool.
+		/// Where the build-mode service is looked for: a menu of the built-in address, a new
+		/// address typed in, or cancel. The built-in address itself is never shown.
 		/// </summary>
 		private static void SetServiceAddress() {
-			Console.WriteLine("Current: " + BuildModeService.BaseUrl);
-			string answer = ConsoleExt.ReadLine("New address (blank keeps it, \"built-in\" restores the default): ", -1, false).Trim();
-			if (answer.Length > 0) {
-				if (string.Equals(answer, "built-in", StringComparison.OrdinalIgnoreCase) == true) {
-					BuildModeService.BaseUrl = "";
-					Console.WriteLine("Using the built-in address: " + BuildModeService.BaseUrl);
-				}
-				if (string.Equals(answer, "built-in", StringComparison.OrdinalIgnoreCase) == false) {
+			ConsoleSelectMenu menu = new(loops: false, numbered: false, clearOnRefresh: true);
+			menu.SetPreChoiceText("Build-mode service address, now: " + BuildModeService.AddressForDisplay);
+			menu.AddChoice(new ConsoleMenuItem("Use the built-in address {DEFAULT}"));
+			menu.AddChoice(new ConsoleMenuItem("Type a new address..."));
+			menu.AddChoice(new ConsoleMenuItem("Cancel"));
+			int choice = menu.GetChoice();
+			if (choice == 0) {
+				BuildModeService.BaseUrl = "";
+				Console.WriteLine("Using the built-in address.");
+				ConsoleExt.WaitForEnter("continue");
+			}
+			if (choice == 1) {
+				string answer = ConsoleExt.ReadLine("New address (blank to cancel): ", -1, false).Trim();
+				if (answer.Length > 0) {
 					BuildModeService.BaseUrl = answer;
 					Console.WriteLine("Using " + BuildModeService.BaseUrl);
+					ConsoleExt.WaitForEnter("continue");
 				}
-				ConsoleExt.WaitForEnter("continue");
 			}
 		}
 	}
