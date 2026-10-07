@@ -25,6 +25,7 @@ namespace TranslationTools {
 			menu.AddChoice(ReportingItem.SetActionOnSelect(ToggleReporting));
 			menu.AddChoice(ServiceItem.SetActionOnSelect(SetServiceAddress));
 			menu.AddChoice(new ConsoleMenuItem("Game installs...").SetActionOnSelect(GameInstallsMenu.Show));
+			menu.AddChoice(new ConsoleMenuItem("Language model...").SetActionOnSelect(LlmMenu.Show));
 			menu.AddChoice(new ConsoleMenuItem("Back"));
 			menu.GetChoice();
 		}

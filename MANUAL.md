@@ -363,6 +363,24 @@ Extract asks the game on both engines now, so every checkpoint can carry one.
 - **Game installs...** - every installed game the tool knows: its folder, what starts it,
   and which checkpoints use it. Change the starter program or its arguments, or remove an
   install; the checkpoints that used it will ask again.
+- **Language model...** - the model the tool asks for help with alignment and, later,
+  translation. Any OpenAI-compatible endpoint works: KoboldCpp on your own machine (the
+  built-in address, `http://localhost:5001`), or a hosted backend with an API key. Each
+  item shows its value and changes it when chosen; a blank answer keeps what is there.
+  **Address**, **Model** and **API key** open a small menu: built-in address or type a
+  new one; pick a model from the endpoint's list, type a name, or send none; type a key
+  or send none. The key is shown with its middle starred. **Endpoint** switches
+  between `/v1/chat/completions` and `/v1/completions`. **Context lines before / after**
+  (0 to 50 each, 5 to start) are how much of the script the model sees around the line
+  it is asked about: more is better judgement, fewer is faster. **Test the connection**
+  sends a one-line prompt and shows the reply and how long it took. Defaults: temperature
+  0.3, 16384 tokens in a reply, 300 seconds to wait. A model that reasons before it
+  answers needs room for the thinking inside that token count; when it runs out, the
+  tool says so instead of showing an empty reply.
+  **Presets...** keeps named snapshots of all these values so you can switch between,
+  say, KoboldCpp at home and a hosted backend: save the current values under a name,
+  load one (every value changes at once), or delete one. "Built-in defaults" is always
+  in the load list and cannot be deleted. A preset holds the API key as well.
 
 
 ## 10. When something is wrong
@@ -388,4 +406,5 @@ warning and error the tool raised about that checkpoint is in it, newest at the 
 
 - The dialogue editor. Until it exists, edit the files under `split\dialogues\` with any
   text editor that saves Shift-JIS (code page 932) without a byte-order mark.
-- The integrity check that gates Build on the sources matching what was last compiled.
+- Alignment between two checkpoints of the same game, with the language model as a
+  second opinion on doubtful pairs.
