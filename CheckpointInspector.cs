@@ -122,7 +122,18 @@ namespace TranslationTools {
 						state.NeedsRecovery = true;
 					}
 				}
-				if (rebuildable == false) {
+				// Siglus's master is compiled from extract\, which Join rebuilds from a
+				// complete split, so sources or a split can rebuild Scene.pck - as a rebuild,
+				// never the original bytes.
+				bool siglusRebuildable = rebuildable == false && SiglusMasterRebuildable(folder);
+				if (siglusRebuildable == true) {
+					InspectSiglus(folder, state);
+					if (state.Form != CheckpointForm.Invalid) {
+						state.Warning = "Scene.pck missing, rebuildable from " + SourcesWord(folder);
+						state.NeedsRecovery = true;
+					}
+				}
+				if (rebuildable == false && siglusRebuildable == false) {
 					Invalidate(state, "no master archive (Scene.pck or nscript.dat)");
 				}
 				decided = true;
@@ -162,11 +173,13 @@ namespace TranslationTools {
 			if (problem.Length == 0 && hasExtract == true && extractHasSources == false && FolderIsEmpty(extract) == false) {
 				problem = "extract\\ holds no .ss sources";
 			}
-			if (problem.Length == 0 && hasSplit == true && extractHasSources == false) {
-				problem = "split\\ without sources in extract\\";
-			}
 			if (problem.Length == 0 && hasSplit == true && (splitHasSources == false || splitHasDialogues == false)) {
 				problem = "split\\ is incomplete (needs .ss files and dialogues\\)";
+			}
+			// A complete split with no sources beside it is whole: Join rebuilds extract\.
+			if (problem.Length == 0 && hasSplit == true && extractHasSources == false) {
+				state.Warning = "extract\\ missing, rebuildable from the split";
+				state.NeedsRecovery = true;
 			}
 
 			if (problem.Length > 0) {
@@ -182,6 +195,36 @@ namespace TranslationTools {
 					state.Form = CheckpointForm.Split;
 				}
 			}
+		}
+
+
+		/// <summary>
+		/// Whether a folder without Scene.pck still holds what rebuilds it: .ss sources in
+		/// extract\, or a complete split (.ss working copies and dialogues\) in split\. No
+		/// NScripter files anywhere, or it is not Siglus.
+		/// </summary>
+		private static bool SiglusMasterRebuildable(string folder) {
+			string extract = Path.Combine(folder, ExtractFolder);
+			string split = Path.Combine(folder, SplitFolder);
+			bool hasSources = Directory.Exists(extract) == true && FolderHoldsExtension(extract, ".ss") == true;
+			bool hasSplit = Directory.Exists(split) == true && FolderHoldsExtension(split, ".ss") == true
+				&& Directory.Exists(Path.Combine(split, DialoguesFolder)) == true;
+			bool nscripterFiles = (Directory.Exists(extract) == true && FolderHoldsNscripterFiles(extract) == true)
+				|| (Directory.Exists(split) == true && FolderHoldsNscripterFiles(split) == true);
+			return nscripterFiles == false && (hasSources == true || hasSplit == true);
+		}
+
+
+		/// <summary>
+		/// "extract\" when sources are there, otherwise "the split", for a warning.
+		/// </summary>
+		private static string SourcesWord(string folder) {
+			string word = "the split";
+			string extract = Path.Combine(folder, ExtractFolder);
+			if (Directory.Exists(extract) == true && FolderHoldsExtension(extract, ".ss") == true) {
+				word = "extract\\";
+			}
+			return word;
 		}
 
 

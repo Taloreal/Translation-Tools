@@ -22,10 +22,14 @@ namespace TranslationTools {
 		private const string BuildModeName = "BuildMode";
 		private const string CompilerVersionName = "CompilerVersion";
 		private const string WarningName = "Warning";
+		private const string WrapColumnName = "WrapColumn";
 		private const string GameFolderName = "GameFolder";
 
 		/// <summary>The BuildMode value meaning "none recorded".</summary>
 		public const int NoBuildMode = -1;
+
+		/// <summary>The WrapColumn value meaning "no governing column".</summary>
+		public const int NoWrapColumn = 0;
 
 
 		/// <summary>
@@ -74,6 +78,13 @@ namespace TranslationTools {
 						checkpoint.Warning = value;
 						known = true;
 					}
+					if (name == WrapColumnName) {
+						bool parsedColumn = int.TryParse(value, out int column);
+						checkpoint.WrapColumn = parsedColumn == true && column > 0
+							? column
+							: NoWrapColumn;
+						known = true;
+					}
 					if (name == GameFolderName) {
 						checkpoint.GameFolder = value;
 						known = true;
@@ -120,6 +131,9 @@ namespace TranslationTools {
 		/// <summary>A standing caution about this checkpoint, shown on its row until cleared. Empty when there is none.</summary>
 		public string Warning = "";
 
+		/// <summary>Siglus only: the display column Join wraps prose at where a scene carries no wrap control code. NoWrapColumn for none.</summary>
+		public int WrapColumn = NoWrapColumn;
+
 		/// <summary>The folder of the game install Run uses (see GameInstallList), which holds the launcher. Empty until Run has asked.</summary>
 		public string GameFolder = "";
 
@@ -158,6 +172,7 @@ namespace TranslationTools {
 				+ BuildModeName + "=" + BuildMode + "\n"
 				+ CompilerVersionName + "=" + CompilerVersion + "\n"
 				+ WarningName + "=" + Warning + "\n"
+				+ WrapColumnName + "=" + WrapColumn + "\n"
 				+ GameFolderName + "=" + GameFolder;
 			foreach (string line in UnknownLines) {
 				encoded += "\n" + line;

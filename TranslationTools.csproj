@@ -12,6 +12,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The user manual ships beside the exe. -->
+    <None Include="MANUAL.md" CopyToOutputDirectory="PreserveNewest" />
     <!-- The compiler installer ships beside the exe so the tool can run it on a fresh machine. -->
     <None Include="Scripts\Update-SiglusSsu.ps1" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Scripts\Update-SiglusSsu.bat" CopyToOutputDirectory="PreserveNewest" />

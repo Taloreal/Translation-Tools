@@ -8,7 +8,7 @@ namespace TranslationTools {
 	/// Join: split\ -> extract\. Rewrites the sources from the split; the split stays, and
 	/// Build then works from extract\. NScripter goes through NScripterJoin, which writes
 	/// the script whole into backups\ first and only then moves it over extract\0.txt.
-	/// Siglus is not built yet.
+	/// Siglus goes through SiglusJoin, which writes nothing until every scene has joined.
 	/// </summary>
 	public static class JoinOperation {
 
@@ -60,7 +60,7 @@ namespace TranslationTools {
 				problem = "Nothing to join: \"" + checkpoint.Label + "\" has no split.";
 			}
 			if (problem.Length == 0 && state.Engine == CheckpointEngine.Siglus) {
-				problem = "Siglus join is not built yet.";
+				problem = JoinSiglus(checkpoint, folder, onLine);
 			}
 
 			if (problem.Length == 0 && state.Engine == CheckpointEngine.NScripter) {
@@ -93,6 +93,36 @@ namespace TranslationTools {
 			}
 			if (problem.Length == 0) {
 				CheckpointLog.Warning(folder, "Join", "joined split\\ into " + NScriptArchive.ScriptName);
+			}
+			return problem;
+		}
+
+
+		/// <summary>
+		/// Siglus: join every working copy in split\ over the scenes in extract\, wrapping
+		/// prose at the checkpoint's governing column where a scene says nothing itself.
+		/// </summary>
+		/// <param name="checkpoint">The checkpoint, for its wrap column.</param>
+		/// <param name="folder">The checkpoint's folder.</param>
+		/// <param name="onLine">Receives progress and warnings.</param>
+		/// <returns>Empty on success, otherwise a plain sentence.</returns>
+		public static string JoinSiglus(Checkpoint checkpoint, string folder, Action<string> onLine) {
+			string split = Path.Combine(folder, CheckpointInspector.SplitFolder);
+			string extract = Path.Combine(folder, CheckpointInspector.ExtractFolder);
+			List<string> warnings = new();
+			onLine("Joining the scenes...");
+			if (checkpoint.WrapColumn == Checkpoint.NoWrapColumn) {
+				onLine("No governing wrap width is set; only scenes with a \"// wrap\" comment are wrapped.");
+			}
+			CheckpointWatch.Ignoring = true;
+			string problem = SiglusJoin.JoinFolder(split, extract, checkpoint.WrapColumn, warnings, onLine);
+			CheckpointWatch.Ignoring = false;
+			foreach (string warning in warnings) {
+				onLine("Warning: " + warning);
+				CheckpointLog.Warning(folder, "Join", warning);
+			}
+			if (problem.Length == 0) {
+				CheckpointLog.Warning(folder, "Join", "joined split\\ over the scenes in extract\\");
 			}
 			return problem;
 		}

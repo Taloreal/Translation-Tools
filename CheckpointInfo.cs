@@ -17,6 +17,7 @@ namespace TranslationTools {
 
 		private const string GameNameName = "GameName";
 		private const string VndbIdName = "VndbId";
+		private const string BuiltWithName = "BuiltWith";
 
 
 		/// <summary>
@@ -46,6 +47,12 @@ namespace TranslationTools {
 						}
 						if (name == VndbIdName) {
 							info.VndbId = value;
+						}
+						if (name == BuiltWithName) {
+							bool parsed = int.TryParse(value, out int mode);
+							info.BuiltWith = parsed == true
+								? mode
+								: Checkpoint.NoBuildMode;
 						}
 					}
 				}
@@ -95,6 +102,13 @@ namespace TranslationTools {
 		/// <summary>VNDB's id for the game, e.g. "v751", once the name has been canonized. Empty until then.</summary>
 		public string VndbId = "";
 
+		/// <summary>
+		/// Siglus: the build mode the master in this folder was last BUILT with, written by
+		/// Build. A fact about that file, not the extract-time mode: Recover uses it only when
+		/// the checkpoint records no mode, and says so. NoBuildMode until a build has happened.
+		/// </summary>
+		public int BuiltWith = Checkpoint.NoBuildMode;
+
 
 		/// <summary>
 		/// Writes the file at the top of a checkpoint's folder, replacing what was there.
@@ -105,7 +119,8 @@ namespace TranslationTools {
 			string problem = "";
 			try {
 				string text = GameNameName + "=" + GameName + Environment.NewLine
-					+ VndbIdName + "=" + VndbId + Environment.NewLine;
+					+ VndbIdName + "=" + VndbId + Environment.NewLine
+					+ BuiltWithName + "=" + BuiltWith + Environment.NewLine;
 				File.WriteAllText(Path.Combine(folder, FileName), text);
 			}
 			catch (Exception exception) {

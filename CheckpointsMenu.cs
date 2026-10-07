@@ -28,10 +28,27 @@ namespace TranslationTools {
 			menu.AddChoice(new ConsoleMenuItem("Re-point this path").SetActionOnSelect(RepointPath));
 			menu.AddChoice(LockItem.SetActionOnSelect(ToggleLock));
 			menu.AddChoice(new ConsoleMenuItem("Remove this checkpoint").SetActionOnSelect(RemoveCheckpoint));
+			menu.AddChoice(new ConsoleMenuItem("Wrap width for Join (Siglus)").SetActionOnSelect(SetWrapColumn));
 			menu.AddChoice(new ConsoleMenuItem("Fork this checkpoint").SetActionOnSelect(ForkCheckpoint));
 			menu.AddChoice(new ConsoleMenuItem("Open this checkpoint in Explorer").SetActionOnSelect(OpenInExplorer));
 			menu.AddChoice(new ConsoleMenuItem("Back"));
 			menu.GetChoice();
+		}
+
+
+		/// <summary>
+		/// Sets or clears the selected checkpoint's governing wrap width, through the same
+		/// question Split asks after a Siglus split.
+		/// </summary>
+		private static void SetWrapColumn() {
+			Checkpoint? selected = CheckpointList.Selected();
+			if (selected == null) {
+				Console.WriteLine("No checkpoint is selected.");
+			}
+			if (selected != null) {
+				SplitOperation.AskWrapColumn(selected, true);
+			}
+			ConsoleExt.WaitForEnter("continue");
 		}
 
 

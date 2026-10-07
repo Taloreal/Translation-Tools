@@ -5,9 +5,11 @@ using TALOREAL_NETCORE_API;
 namespace TranslationTools {
 
 	/// <summary>
-	/// Split: extract\ -> split\. Runs only on an unsplit checkpoint; a split one keeps
-	/// its split, since splitting again would orphan the edits in it. NScripter goes
-	/// through NScripterSplit. Siglus is not built yet.
+	/// Split: extract\ -> split\. Runs on an unsplit checkpoint. A split one keeps its split,
+	/// since splitting again would orphan the edits in it, unless start over is on, which
+	/// offers to back the split up or discard it first. NScripter goes through
+	/// NScripterSplit, Siglus through SiglusSplit; a Siglus split ends by asking for the
+	/// checkpoint's governing wrap width.
 	/// </summary>
 	public static class SplitOperation {
 
@@ -31,9 +33,94 @@ namespace TranslationTools {
 			}
 			if (problem.Length == 0) {
 				Console.WriteLine("Split into " + Path.Combine(folder, CheckpointInspector.SplitFolder));
+				if (CheckpointInspector.Inspect(checkpoint!.Path).Engine == CheckpointEngine.Siglus) {
+					AskWrapColumn(checkpoint);
+				}
 			}
 			CheckpointWatch.MarkStale();
 			ConsoleExt.WaitForEnter("continue");
+		}
+
+
+		/// <summary>
+		/// After a Siglus split: asks for the checkpoint's governing wrap column, the display
+		/// width Join wraps prose at in any scene that carries no "// wrap" control code.
+		/// Blank keeps what is recorded; 0 clears it.
+		/// </summary>
+		public static void AskWrapColumn(Checkpoint checkpoint) {
+			AskWrapColumn(checkpoint, false);
+		}
+
+
+		/// <summary>
+		/// The wrap-width question. A master like one the width was chosen for before -
+		/// eighteen or more of its twenty slice hashes shared - gets that width without a
+		/// question when the checkpoint has none yet and the caller allows it. An answer is
+		/// remembered against the master's hash set for the next checkpoint of this game.
+		/// </summary>
+		/// <param name="checkpoint">The checkpoint; its master's hash set keys the memory.</param>
+		/// <param name="alwaysAsk">True to ask even when a remembered width applies (the menu); false after a split.</param>
+		public static void AskWrapColumn(Checkpoint checkpoint, bool alwaysAsk) {
+			string[] hashSet = MasterHashSet(checkpoint);
+			int rememberedColumn = Checkpoint.NoWrapColumn;
+			bool remembered = false;
+			if (hashSet.Length > 0) {
+				remembered = WrapWidthMemory.Find(hashSet, out rememberedColumn);
+			}
+			bool applied = false;
+			if (remembered == true && alwaysAsk == false && checkpoint.WrapColumn == Checkpoint.NoWrapColumn) {
+				checkpoint.WrapColumn = rememberedColumn;
+				CheckpointList.Update(checkpoint.Label, checkpoint);
+				Console.WriteLine("Governing wrap width: " + WidthWord(rememberedColumn) + ", the choice made for an archive like this one before. Change it under the Checkpoints menu.");
+				applied = true;
+			}
+			if (applied == false) {
+				string current = WidthWord(checkpoint.WrapColumn);
+				Console.WriteLine("Join can wrap English prose to the game's text window. A scene can say its own width with a \"// wrap 60\" comment;");
+				Console.WriteLine("this governing width covers scenes that do not. Current: " + current + ".");
+				string typed = ConsoleExt.ReadLine("Governing wrap width in characters (blank to keep, 0 for none): ", -1, false).Trim();
+				if (typed.Length > 0) {
+					bool parsed = int.TryParse(typed, out int column);
+					if (parsed == false || column < 0) {
+						Console.WriteLine("Not a width. Kept " + current + ".");
+					}
+					if (parsed == true && column >= 0) {
+						checkpoint.WrapColumn = column;
+						CheckpointList.Update(checkpoint.Label, checkpoint);
+						if (hashSet.Length > 0) {
+							WrapWidthMemory.Record(hashSet, column);
+						}
+						Console.WriteLine("Governing wrap width: " + WidthWord(column) + ".");
+					}
+				}
+			}
+		}
+
+
+		private static string WidthWord(int column) {
+			string word = "none";
+			if (column > Checkpoint.NoWrapColumn) {
+				word = column.ToString();
+			}
+			return word;
+		}
+
+
+		/// <summary>
+		/// The hash set of the checkpoint's Siglus master, or empty when it cannot be read.
+		/// </summary>
+		private static string[] MasterHashSet(Checkpoint checkpoint) {
+			string[] hashSet = new string[0];
+			string master = Path.Combine(CheckpointInspector.FolderOf(checkpoint.Path), "Scene.pck");
+			if (File.Exists(master) == true) {
+				try {
+					hashSet = BuildModeService.SegmentHashes(master);
+				}
+				catch (Exception) {
+					// Unreadable master: the question is asked and nothing is remembered.
+				}
+			}
+			return hashSet;
 		}
 
 
@@ -73,7 +160,20 @@ namespace TranslationTools {
 				problem = "Nothing to split: extract\\ holds no sources. Extract first.";
 			}
 			if (problem.Length == 0 && state.Engine == CheckpointEngine.Siglus) {
-				problem = "Siglus split is not built yet.";
+				string extract = Path.Combine(folder, CheckpointInspector.ExtractFolder);
+				string split = Path.Combine(folder, CheckpointInspector.SplitFolder);
+				List<string> warnings = new();
+				onLine("Splitting the scenes...");
+				CheckpointWatch.Ignoring = true;
+				problem = SiglusSplit.SplitFolder(extract, split, warnings, onLine);
+				CheckpointWatch.Ignoring = false;
+				foreach (string warning in warnings) {
+					onLine("Warning: " + warning);
+					CheckpointLog.Warning(folder, "Split", warning);
+				}
+				if (problem.Length == 0) {
+					CheckpointLog.Warning(folder, "Split", "split the scenes into split\\");
+				}
 			}
 
 			if (problem.Length == 0 && state.Engine == CheckpointEngine.NScripter) {

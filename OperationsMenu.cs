@@ -34,7 +34,7 @@ namespace TranslationTools {
 			SplitStartOver = false;
 			ConsoleSelectMenu menu = new(loops: true, numbered: false, clearOnRefresh: true);
 			menu.AddOnDrawMenuAction(RefreshHeader);
-			menu.AddChoice(new ConsoleMenuItem("Recover   rebuild a missing nscript.dat or 0.txt").SetActionOnSelect(RecoverOperation.Run));
+			menu.AddChoice(new ConsoleMenuItem("Recover   rebuild a missing master or its sources").SetActionOnSelect(RecoverOperation.Run));
 			menu.AddChoice(ExtractItem.SetActionOnSelect(RunExtract));
 			menu.AddChoice(SplitItem.SetActionOnSelect(RunSplit));
 			menu.AddChoice(new ConsoleMenuItem("Join      split\\ -> extract\\").SetActionOnSelect(JoinOperation.Run));

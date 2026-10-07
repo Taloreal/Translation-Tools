@@ -205,7 +205,7 @@ namespace TranslationTools {
 		/// Siglus: compile extract\ to a new archive beside the backups, and only then move it
 		/// over the master. A compile that fails leaves the master untouched.
 		/// </summary>
-		private static string BuildSiglus(Checkpoint checkpoint, string folder, Action<string> onLine) {
+		public static string BuildSiglus(Checkpoint checkpoint, string folder, Action<string> onLine) {
 			string problem = "";
 			if (SiglusCompiler.Available == false) {
 				problem = SiglusCompiler.NotInstalledMessage;
@@ -233,6 +233,13 @@ namespace TranslationTools {
 				try {
 					File.Move(built, master, true);
 					onLine("Replaced the master with the new archive.");
+					// What this master was built with is a fact about the file, kept with it.
+					CheckpointInfo info = CheckpointInfo.Load(folder);
+					info.BuiltWith = buildMode;
+					string saveProblem = info.Save(folder);
+					if (saveProblem.Length > 0) {
+						CheckpointLog.Warning(folder, "Build", saveProblem);
+					}
 				}
 				catch (Exception exception) {
 					problem = "Compiled, but could not replace the master: " + exception.Message + " The new archive is at " + built;
