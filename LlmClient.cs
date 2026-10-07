@@ -61,55 +61,55 @@ namespace TranslationTools {
 
 		/// <summary>The model name sent with every request. Blank lets the endpoint use whatever it has loaded.</summary>
 		public static string Model {
-			get { return ReadText(ModelKey, ""); }
+			get { return ReadValue(ModelKey, "").Trim(); }
 			set { Settings.SetValue(ModelKey, value.Trim()); }
 		}
 
 		/// <summary>Sent as "Authorization: Bearer ..." when not blank. A local KoboldCpp needs none; a hosted backend does.</summary>
 		public static string ApiKey {
-			get { return ReadText(ApiKeyKey, ""); }
+			get { return ReadValue(ApiKeyKey, "").Trim(); }
 			set { Settings.SetValue(ApiKeyKey, value.Trim()); }
 		}
 
 		/// <summary>Sampling temperature, 0 to 2.</summary>
 		public static double Temperature {
-			get { return ReadDouble(TemperatureKey, 0.3); }
+			get { return ReadValue(TemperatureKey, 0.3); }
 			set { Settings.SetValue(TemperatureKey, value); }
 		}
 
 		/// <summary>The most tokens a reply may hold unless a call asks for fewer.</summary>
 		public static int MaxTokens {
-			get { return ReadInt(MaxTokensKey, 16384); }
+			get { return ReadValue(MaxTokensKey, 16384); }
 			set { Settings.SetValue(MaxTokensKey, value); }
 		}
 
 		/// <summary>How long a call waits for the reply unless it asks for less.</summary>
 		public static int TimeoutSeconds {
-			get { return ReadInt(TimeoutKey, 300); }
+			get { return ReadValue(TimeoutKey, 300); }
 			set { Settings.SetValue(TimeoutKey, value); }
 		}
 
 		/// <summary>True for /v1/chat/completions, false for /v1/completions.</summary>
 		public static bool UseChatEndpoint {
-			get { return ReadBool(ChatEndpointKey, true); }
+			get { return ReadValue(ChatEndpointKey, true); }
 			set { Settings.SetValue(ChatEndpointKey, value); }
 		}
 
 		/// <summary>On the chat endpoint: send the system text as its own message, or fold it into the user message.</summary>
 		public static bool UseSystemRole {
-			get { return ReadBool(SystemRoleKey, true); }
+			get { return ReadValue(SystemRoleKey, true); }
 			set { Settings.SetValue(SystemRoleKey, value); }
 		}
 
 		/// <summary>Script lines shown to the model before the line it is asked about, 0 to MostContextLines.</summary>
 		public static int ContextBefore {
-			get { return Math.Clamp(ReadInt(ContextBeforeKey, DefaultContextLines), 0, MostContextLines); }
+			get { return Math.Clamp(ReadValue(ContextBeforeKey, DefaultContextLines), 0, MostContextLines); }
 			set { Settings.SetValue(ContextBeforeKey, Math.Clamp(value, 0, MostContextLines)); }
 		}
 
 		/// <summary>Script lines shown to the model after the line it is asked about, 0 to MostContextLines.</summary>
 		public static int ContextAfter {
-			get { return Math.Clamp(ReadInt(ContextAfterKey, DefaultContextLines), 0, MostContextLines); }
+			get { return Math.Clamp(ReadValue(ContextAfterKey, DefaultContextLines), 0, MostContextLines); }
 			set { Settings.SetValue(ContextAfterKey, Math.Clamp(value, 0, MostContextLines)); }
 		}
 
@@ -437,40 +437,13 @@ namespace TranslationTools {
 		}
 
 
-		private static string ReadText(string key, string fallback) {
-			string value = fallback;
-			bool stored = Settings.GetValue(key, out string? saved);
+		/// <summary>
+		/// A setting of any stored type, or its fallback when nothing is stored.
+		/// </summary>
+		private static T ReadValue<T>(string key, T fallback) {
+			T value = fallback;
+			bool stored = Settings.GetValue<T>(key, out T? saved);
 			if (stored == true && saved != null) {
-				value = saved.Trim();
-			}
-			return value;
-		}
-
-
-		private static int ReadInt(string key, int fallback) {
-			int value = fallback;
-			bool stored = Settings.GetValue(key, out int saved);
-			if (stored == true) {
-				value = saved;
-			}
-			return value;
-		}
-
-
-		private static double ReadDouble(string key, double fallback) {
-			double value = fallback;
-			bool stored = Settings.GetValue(key, out double saved);
-			if (stored == true) {
-				value = saved;
-			}
-			return value;
-		}
-
-
-		private static bool ReadBool(string key, bool fallback) {
-			bool value = fallback;
-			bool stored = Settings.GetValue(key, out bool saved);
-			if (stored == true) {
 				value = saved;
 			}
 			return value;

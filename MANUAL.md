@@ -297,8 +297,45 @@ file from those both splits hold. The pair folder's `pair.info` names both sides
 serial and the file by key, so renaming a label or re-pointing a path never loses a pair.
 
 **Open a pair...** lists the pairs, newest first, each showing its file, its editable side,
-its reference, and `(missing)` for a side whose checkpoint has since been removed. The walk
-through the lines is the next piece to be built.
+its reference, and `(missing)` for a side whose checkpoint has since been removed. A pair
+opens to its facts and progress, with three choices:
+
+- **Walk the lines** starts the walk, or resumes it where it stopped. Every answer is
+  written at once to `pairing.txt` in the pair folder, so closing the window loses
+  nothing.
+- **Reset progress** forgets every decision for the file after a yes, for when a mistake
+  early on is noticed late.
+- **Back**.
+
+### The walk
+
+The editable side and the reference are read line against line. Two lines of fifteen
+characters or more whose text is nearly the same pair on their own, which carries a
+same-language pair through everything that did not change. Everything else is a question,
+with both sides shown around the current line, as many lines before and after as the
+language model settings say, and the model's recommendation underneath when a model is
+reachable. The answers:
+
+- **Same line** - the two are one line, a translation of each other counts.
+- **This side has this line, the other does not** - one for each side: the line has no
+  partner, the other side goes straight on.
+- **Out of order** - the partner is further on. Say which side's line it is, then pick
+  its partner from the other side's remaining lines, paged. Lines jumped over stay
+  undecided until the walk reaches them.
+- **Undo the previous decision** and **Stop here**.
+
+When the model says the next several lines pair up in order, they are offered as one run
+to accept with a single answer; declining walks them one by one. The model is asked once
+per position and left alone for the rest of the session after two failed replies. It
+only ever recommends; every pairing is yours.
+
+Under a debugger, TGD's own anchors switch on: lines whose nametags name the same
+character, through the glossary, pair without asking. That is marked TGD only and is not
+part of the tool for other games.
+
+When one side runs out, every line left on the other is recorded as having no partner and
+the walk is complete. Apply, which renumbers both files from the pairing, is the next
+piece to be built.
 
 
 ## 8. The Checkpoints menu

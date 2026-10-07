@@ -94,13 +94,68 @@ namespace TranslationTools {
 			}
 			int picked = PagedPicker.Pick(rows, "Pairs, newest first");
 			if (picked >= 0) {
-				AlignmentPair pair = pairs[picked];
-				Console.WriteLine("Made:      " + pair.Created);
-				Console.WriteLine("File:      " + pair.Key);
-				Console.WriteLine("Reference: " + SideLine(pair.CanonicalSerial, pair.CanonicalLabel));
-				Console.WriteLine("Editable:  " + SideLine(pair.OtherSerial, pair.OtherLabel));
-				Console.WriteLine("Folder:    " + pair.Folder);
-				Console.WriteLine("The walk is not built yet; this pair is ready for it.");
+				PairMenu(pairs[picked]);
+			}
+		}
+
+
+		/// <summary>
+		/// One pair's menu: its facts and progress above, then walk (or resume), reset, back.
+		/// </summary>
+		private static void PairMenu(AlignmentPair pair) {
+			ConsoleSelectMenu menu = new(loops: true, numbered: false, clearOnRefresh: true);
+			menu.AddOnDrawMenuAction((shown) => {
+				AlignmentPairing pairing = AlignmentPairing.Load(pair.Folder);
+				shown.SetPreChoiceText("-- Pair made " + pair.Created + " --\n"
+					+ "File:      " + pair.Key + "\n"
+					+ "Reference: " + SideLine(pair.CanonicalSerial, pair.CanonicalLabel) + "\n"
+					+ "Editable:  " + SideLine(pair.OtherSerial, pair.OtherLabel) + "\n"
+					+ "Folder:    " + pair.Folder + "\n"
+					+ "Progress:  " + pairing.Status + ", " + pairing.PairedCount + " pairs, " + pairing.EditOnlyCount + " only on the editable side, "
+					+ pairing.RefOnlyCount + " only on the reference\n");
+			});
+			menu.AddChoice(new ConsoleMenuItem("Walk the lines (resumes where it stopped)").SetActionOnSelect(() => { WalkPair(pair); }));
+			menu.AddChoice(new ConsoleMenuItem("Reset progress: forget every pairing of this file").SetActionOnSelect(() => { ResetPair(pair); }));
+			menu.AddChoice(new ConsoleMenuItem("Back"));
+			menu.GetChoice();
+		}
+
+
+		/// <summary>
+		/// Finds both checkpoints by serial and starts or resumes the walk.
+		/// </summary>
+		private static void WalkPair(AlignmentPair pair) {
+			Checkpoint? reference = CheckpointList.FindBySerial(pair.CanonicalSerial);
+			Checkpoint? edit = CheckpointList.FindBySerial(pair.OtherSerial);
+			string problem = "";
+			if (reference == null) {
+				problem = "No checkpoint has the reference serial " + pair.CanonicalSerial + " any more.";
+			}
+			if (problem.Length == 0 && edit == null) {
+				problem = "No checkpoint has the editable serial " + pair.OtherSerial + " any more.";
+			}
+			if (problem.Length == 0 && reference!.Writable == true) {
+				problem = "The reference \"" + reference.Label + "\" is not locked. Lock it, or start a new pair.";
+			}
+			if (problem.Length > 0) {
+				Console.WriteLine(problem);
+				ConsoleExt.WaitForEnter("continue");
+			}
+			if (problem.Length == 0) {
+				AlignmentWalk.Run(pair, edit!, reference!);
+			}
+		}
+
+
+		/// <summary>
+		/// Forgets the pairing file and the status after a yes.
+		/// </summary>
+		private static void ResetPair(AlignmentPair pair) {
+			AlignmentPairing pairing = AlignmentPairing.Load(pair.Folder);
+			bool sure = YesNoMenu.Ask("Forget all " + pairing.Entries.Count + " decision(s) for " + pair.Key + "? The next walk starts from the first line.");
+			if (sure == true) {
+				pairing.Reset();
+				Console.WriteLine("Progress reset.");
 				ConsoleExt.WaitForEnter("continue");
 			}
 		}
