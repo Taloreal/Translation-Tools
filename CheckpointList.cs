@@ -37,7 +37,26 @@ namespace TranslationTools {
 					checkpoints.Add(checkpoint);
 				}
 			}
+			if (StampMissingSerials(checkpoints) == true) {
+				Save(checkpoints);
+			}
 			return checkpoints;
+		}
+
+
+		/// <summary>
+		/// The checkpoint with a serial, or null.
+		/// </summary>
+		/// <param name="serial">The serial to look for.</param>
+		/// <returns>The checkpoint, or null when no serial matches.</returns>
+		public static Checkpoint? FindBySerial(string serial) {
+			Checkpoint? found = null;
+			foreach (Checkpoint checkpoint in All()) {
+				if (found == null && checkpoint.Serial == serial.Trim()) {
+					found = checkpoint;
+				}
+			}
+			return found;
 		}
 
 
@@ -93,19 +112,33 @@ namespace TranslationTools {
 
 
 		/// <summary>
-		/// Stores a new checkpoint and selects it.
+		/// Stores a new checkpoint and selects it, giving it this second as its serial. A
+		/// second checkpoint created in the same second is refused, since the serial must be
+		/// unique: the caller says to wait a moment and try again.
 		/// </summary>
-		/// <param name="checkpoint">The checkpoint to add.</param>
-		/// <returns>True when added; false when its label is already taken or not storable.</returns>
-		public static bool Add(Checkpoint checkpoint) {
-			bool added = false;
+		/// <param name="checkpoint">The checkpoint to add. Its Serial is set here.</param>
+		/// <returns>Empty when added; otherwise a plain sentence saying why not.</returns>
+		public static string Add(Checkpoint checkpoint) {
+			string problem = "";
 			bool storable = Checkpoint.IsStorable(checkpoint.Label) == true && Checkpoint.IsStorable(checkpoint.Path) == true;
-			if (storable == true && Find(checkpoint.Label) == null) {
-				Store.Add(checkpoint.Encode());
-				SelectedLabel = checkpoint.Label;
-				added = true;
+			if (storable == false) {
+				problem = "That label or path cannot be stored.";
 			}
-			return added;
+			if (problem.Length == 0 && Find(checkpoint.Label) != null) {
+				problem = "A checkpoint is already labelled \"" + checkpoint.Label + "\".";
+			}
+			if (problem.Length == 0) {
+				string serial = Checkpoint.SerialAt(DateTime.Now);
+				if (FindBySerial(serial) != null) {
+					problem = "A checkpoint was created this very second; wait a moment and try again.";
+				}
+				if (problem.Length == 0) {
+					checkpoint.Serial = serial;
+					Store.Add(checkpoint.Encode());
+					SelectedLabel = checkpoint.Label;
+				}
+			}
+			return problem;
 		}
 
 
@@ -194,6 +227,43 @@ namespace TranslationTools {
 		/// </summary>
 		public static bool SameLabel(string first, string second) {
 			return string.Equals(first.Trim(), second.Trim(), StringComparison.OrdinalIgnoreCase);
+		}
+
+
+		/// <summary>
+		/// Gives a serial to every checkpoint that has none: entries written before serials
+		/// existed. Each gets a different second, counted back from now so none can clash
+		/// with a checkpoint created from here on.
+		/// </summary>
+		/// <param name="all">The checkpoints, stamped in place.</param>
+		/// <returns>True when any was stamped, so the caller saves.</returns>
+		private static bool StampMissingSerials(List<Checkpoint> all) {
+			bool stamped = false;
+			DateTime moment = DateTime.Now.AddSeconds(-1);
+			foreach (Checkpoint checkpoint in all) {
+				if (checkpoint.Serial.Length == 0) {
+					string serial = Checkpoint.SerialAt(moment);
+					while (HasSerial(all, serial) == true) {
+						moment = moment.AddSeconds(-1);
+						serial = Checkpoint.SerialAt(moment);
+					}
+					checkpoint.Serial = serial;
+					moment = moment.AddSeconds(-1);
+					stamped = true;
+				}
+			}
+			return stamped;
+		}
+
+
+		private static bool HasSerial(List<Checkpoint> all, string serial) {
+			bool has = false;
+			foreach (Checkpoint checkpoint in all) {
+				if (checkpoint.Serial == serial) {
+					has = true;
+				}
+			}
+			return has;
 		}
 
 

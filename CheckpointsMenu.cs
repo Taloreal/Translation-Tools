@@ -135,6 +135,10 @@ namespace TranslationTools {
 			if (problem.Length == 0 && CheckpointList.Find(label) != null) {
 				problem = "A checkpoint is already labelled \"" + label + "\".";
 			}
+			if (problem.Length == 0 && CheckpointList.FindBySerial(Checkpoint.SerialAt(DateTime.Now)) != null) {
+				// Checked before the copy so a refusal never leaves a copied folder behind.
+				problem = "A checkpoint was created this very second; wait a moment and try again.";
+			}
 			string destination = "";
 			if (problem.Length == 0) {
 				destination = CheckpointsRoot.FolderFor(label, out string rootProblem);
@@ -156,11 +160,16 @@ namespace TranslationTools {
 					fork.CompilerVersion = source.CompilerVersion;
 					fork.Warning = source.Warning;
 					fork.GameFolder = source.GameFolder;
-					CheckpointList.Add(fork);
-					CheckpointLog.Warning(sourceFolder, "Fork", "forked to \"" + label + "\" at " + fork.Path);
-					CheckpointLog.Warning(destination, "Fork", "forked from \"" + source.Label + "\" at " + sourceFolder);
-					ProbeAllRows();
-					Console.WriteLine("Forked to \"" + label + "\" at " + fork.Path + " and selected it (writable).");
+					string refused = CheckpointList.Add(fork);
+					if (refused.Length > 0) {
+						Console.WriteLine(refused + " The copy is at " + fork.Path + "; add it as a checkpoint by hand.");
+					}
+					if (refused.Length == 0) {
+						CheckpointLog.Warning(sourceFolder, "Fork", "forked to \"" + label + "\" at " + fork.Path);
+						CheckpointLog.Warning(destination, "Fork", "forked from \"" + source.Label + "\" at " + sourceFolder);
+						ProbeAllRows();
+						Console.WriteLine("Forked to \"" + label + "\" at " + fork.Path + " and selected it (writable), serial " + fork.Serial + ".");
+					}
 				}
 				catch (Exception exception) {
 					problem = "Could not fork: " + exception.Message + " What was copied so far is at " + destination;
@@ -260,7 +269,7 @@ namespace TranslationTools {
 				if (row.Warning.Length > 0) {
 					game += "  WARNING: " + row.Warning;
 				}
-				header += marker + row.Label.PadRight(20) + "  " + state.Describe().PadRight(26) + "  " + row.StateWord + game + "\n";
+				header += marker + row.Label.PadRight(20) + " #" + row.Serial + "  " + state.Describe().PadRight(26) + "  " + row.StateWord + game + "\n";
 			}
 			if (selected == null) {
 				header += "No checkpoints yet. Add one to begin.\n";
@@ -307,9 +316,11 @@ namespace TranslationTools {
 						bool cancelled = false;
 						problem = OfferGameFolderCopy(checkpoint, out cancelled);
 						if (problem.Length == 0 && cancelled == false) {
-							CheckpointList.Add(checkpoint);
+							problem = CheckpointList.Add(checkpoint);
+						}
+						if (problem.Length == 0 && cancelled == false) {
 							ProbeAllRows();
-							Console.WriteLine("Added and selected \"" + label + "\" (writable).");
+							Console.WriteLine("Added and selected \"" + label + "\" (writable), serial " + checkpoint.Serial + ".");
 						}
 						if (cancelled == true) {
 							Console.WriteLine("Cancelled. Nothing added.");

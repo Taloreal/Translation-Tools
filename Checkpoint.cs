@@ -3,8 +3,9 @@
 namespace TranslationTools {
 
 	/// <summary>
-	/// One split tree (or packed archive) the tool holds a reference to. The label is its
-	/// identity; the path can be re-pointed. Engine and split state are never stored here -
+	/// One split tree (or packed archive) the tool holds a reference to. The label is what
+	/// the user knows it by and may change; the serial (its creation second) is its identity
+	/// for anything that refers to it; the path can be re-pointed. Engine and split state are never stored here -
 	/// they are read off the disk when the checkpoint is shown or used. The game it is lives
 	/// in checkpoint.info inside the folder (see CheckpointInfo), not here: this entry holds
 	/// what is true of this machine, the file holds what is true of the folder.
@@ -24,9 +25,13 @@ namespace TranslationTools {
 		private const string WarningName = "Warning";
 		private const string WrapColumnName = "WrapColumn";
 		private const string GameFolderName = "GameFolder";
+		private const string SerialName = "Serial";
 
 		/// <summary>The BuildMode value meaning "none recorded".</summary>
 		public const int NoBuildMode = -1;
+
+		/// <summary>How a serial is written: the creation moment to the second, as fourteen digits.</summary>
+		public const string SerialFormat = "yyyyMMddHHmmss";
 
 		/// <summary>The WrapColumn value meaning "no governing column".</summary>
 		public const int NoWrapColumn = 0;
@@ -89,6 +94,10 @@ namespace TranslationTools {
 						checkpoint.GameFolder = value;
 						known = true;
 					}
+					if (name == SerialName) {
+						checkpoint.Serial = value.Trim();
+						known = true;
+					}
 					if (name == "Launcher" || name == "LauncherArguments") {
 						// Older builds kept these here; they now live on the game install. Dropped.
 						known = true;
@@ -99,6 +108,16 @@ namespace TranslationTools {
 				}
 			}
 			return checkpoint.Label.Length > 0 && checkpoint.Path.Length > 0;
+		}
+
+
+		/// <summary>
+		/// The serial a checkpoint created at a moment gets: that moment to the second.
+		/// </summary>
+		/// <param name="moment">When the checkpoint is created.</param>
+		/// <returns>Fourteen digits.</returns>
+		public static string SerialAt(DateTime moment) {
+			return moment.ToString(SerialFormat, System.Globalization.CultureInfo.InvariantCulture);
 		}
 
 
@@ -137,6 +156,14 @@ namespace TranslationTools {
 		/// <summary>The folder of the game install Run uses (see GameInstallList), which holds the launcher. Empty until Run has asked.</summary>
 		public string GameFolder = "";
 
+		/// <summary>
+		/// The checkpoint's identity for anything that refers to it from outside the list, such
+		/// as an alignment: the moment it was created, to the second, as fourteen digits. The
+		/// label is the user's to read and change; the serial never changes. Empty only on an
+		/// entry written by a build that had no serials, until the list stamps it.
+		/// </summary>
+		public string Serial = "";
+
 		/// <summary>Whether a build mode has been recorded.</summary>
 		public bool HasBuildMode {
 			get { return BuildMode != NoBuildMode; }
@@ -173,7 +200,8 @@ namespace TranslationTools {
 				+ CompilerVersionName + "=" + CompilerVersion + "\n"
 				+ WarningName + "=" + Warning + "\n"
 				+ WrapColumnName + "=" + WrapColumn + "\n"
-				+ GameFolderName + "=" + GameFolder;
+				+ GameFolderName + "=" + GameFolder + "\n"
+				+ SerialName + "=" + Serial;
 			foreach (string line in UnknownLines) {
 				encoded += "\n" + line;
 			}

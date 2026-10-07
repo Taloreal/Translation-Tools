@@ -278,6 +278,12 @@ fetched from a backup if it mattered. It does not stop.
 
 Press **Enter** on the selector line.
 
+Each row shows the label, then a serial number after `#`. The serial is the second the
+checkpoint was created, as fourteen digits, and it never changes: rename the label or
+re-point the path as you like, anything that refers to a checkpoint from outside the
+list, such as an alignment, refers to it by serial. Two checkpoints cannot be created
+in the same second; the tool asks you to wait a moment.
+
 - **Add a checkpoint** - section 4.
 - **Rename this label** - a new name; blank keeps the old one. The folder is not renamed.
 - **Move this checkpoint up the list / down the list** - with this row highlighted,
