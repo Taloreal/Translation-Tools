@@ -246,13 +246,17 @@ notices, and nothing else runs on it until Recover has put the piece back.
   warning you each step down. If the game then will not run, Build can look again from an
   untouched `Scene.pck`.
 
-
 ## 6. The switches on Extract, Split, Join and Build
 
 Four operations carry a switch at the end of their menu line. With the operation
 highlighted, press **Left** or **Right** to flip it. Every switch is off each time the menu
 opens, and turns off again after its operation runs. They are separate on purpose:
 flipping one does nothing to the others.
+
+Every yes-or-no question in the tool works the same way: one line reading
+`<- question  no ->`, which **Left** or **Right** flips to YES and **Enter** answers. It
+always starts at no, so Enter alone never agrees to anything. Where cancelling means
+something other than no, a Cancel line sits under it.
 
 **Start over**, on Extract and Split. With it on, the operation no longer refuses a
 checkpoint that is already split. Instead it asks what to do with the split: back it up
@@ -274,7 +278,30 @@ Join says which files it is about to overwrite, in the log as well, so the edit 
 fetched from a backup if it mattered. It does not stop.
 
 
-## 7. The Checkpoints menu
+## 7. Alignment
+
+Alignment matches one dialogue file between two checkpoints of the same game, line by
+line, so a translation in one can later follow the other. A pair is two checkpoints plus
+one dialogue file; align another file and that is another pair. It ignores the selected checkpoint and
+never asks which engine or language either side is: any two split checkpoints can be
+paired. Alignments live in a folder named `Alignment` under your checkpoints folder, one
+folder per pair, named by the moment it was made; no checkpoint can be labelled
+`Alignment`.
+
+**Start a new pair...** picks the two checkpoints from a list, then settles which is the
+**reference**: the side that is read and never edited, and that is locked. If one of the
+two is locked, that is the reference. If neither is, you name it and it is locked for you.
+If both are, nothing could be edited and the pair is refused. A sound checkpoint that is
+not split yet is offered a split on the spot; declining cancels the pair. Then you pick the dialogue
+file from those both splits hold. The pair folder's `pair.info` names both sides by
+serial and the file by key, so renaming a label or re-pointing a path never loses a pair.
+
+**Open a pair...** lists the pairs, newest first, each showing its file, its editable side,
+its reference, and `(missing)` for a side whose checkpoint has since been removed. The walk
+through the lines is the next piece to be built.
+
+
+## 8. The Checkpoints menu
 
 Press **Enter** on the selector line.
 
@@ -306,7 +333,7 @@ in the same second; the tool asks you to wait a moment.
 - **Open this checkpoint in Explorer** - opens its folder.
 
 
-## 8. Glossaries
+## 9. Glossaries
 
 **Glossaries** on the main menu opens the selected checkpoint's glossary: the characters
 of the game and the rules the translation follows. Nothing uses them yet; they are the
@@ -354,7 +381,7 @@ none. Fork copies the glossary with the rest.
 Extract asks the game on both engines now, so every checkpoint can carry one.
 
 
-## 9. Settings
+## 10. Settings
 
 - **Checkpoints folder** - where new checkpoints made by Add and Fork go, one folder per
   label.
@@ -389,7 +416,7 @@ Extract asks the game on both engines now, so every checkpoint can carry one.
   in the load list and cannot be deleted. A preset holds the API key as well.
 
 
-## 10. When something is wrong
+## 11. When something is wrong
 
 **The row says "invalid: ..."** The folder does not have the shape in section 2. The reason
 says what is off: both masters present, no master, an extra file at the top level, a split
@@ -408,7 +435,7 @@ file the tool replaced is there, named with the date and time.
 warning and error the tool raised about that checkpoint is in it, newest at the bottom.
 
 
-## 11. Not built yet
+## 12. Not built yet
 
 - The dialogue editor. Until it exists, edit the files under `split\dialogues\` with any
   text editor that saves Shift-JIS (code page 932) without a byte-order mark.

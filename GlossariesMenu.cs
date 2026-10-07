@@ -56,7 +56,7 @@ namespace TranslationTools {
 					source = PickCheckpoint(sources, "Several checkpoints of this game have a glossary. Copy which one here?");
 				}
 				if (source != null) {
-					bool yes = ConsoleExt.ReadValue<bool>("\"" + source.Label + "\" is the same game and has a glossary. Copy it to \"" + checkpoint.Label + "\"? (y/n): ", false);
+					bool yes = YesNoMenu.Ask("\"" + source.Label + "\" is the same game and has a glossary. Copy it to \"" + checkpoint.Label + "\"?");
 					if (yes == true) {
 						string problem = Glossary.CopyOver(CheckpointInspector.FolderOf(source.Path), folder);
 						Report(folder, problem, "copied the glossary from \"" + source.Label + "\"");
@@ -177,7 +177,7 @@ namespace TranslationTools {
 						if (Glossary.Exists(targetFolder) == true) {
 							had = " It has " + Glossary.Characters(targetFolder).Count + " characters and " + Glossary.Rules(targetFolder).Count + " rules now, which go.";
 						}
-						bool yes = ConsoleExt.ReadValue<bool>("Replace \"" + target.Label + "\"'s glossary?" + had + " (y/n): ", false);
+						bool yes = YesNoMenu.Ask("Replace \"" + target.Label + "\"'s glossary?" + had);
 						if (yes == true) {
 							string problem = Glossary.CopyOver(CheckpointInspector.FolderOf(selected.Path), targetFolder);
 							Report(targetFolder, problem, "glossary replaced by a copy of \"" + selected.Label + "\"'s");
@@ -393,7 +393,7 @@ namespace TranslationTools {
 		private static void Remove() {
 			CharacterEntry? entry = Pick("Remove which character? Its file is deleted.");
 			if (entry != null) {
-				bool yes = ConsoleExt.ReadValue<bool>("Remove " + entry.En + "? (y/n): ", false);
+				bool yes = YesNoMenu.Ask("Remove " + entry.En + "?");
 				if (yes == true) {
 					Glossary.RemoveCharacter(GlossariesMenu.SelectedFolder(), entry.En);
 					Finish("", "Removed " + entry.En + ".");
@@ -585,7 +585,7 @@ namespace TranslationTools {
 			int index = PickIndex(rules, "Remove which rule?");
 			if (index >= 0) {
 				Console.WriteLine("Rule " + (index + 1) + ": " + rules[index]);
-				bool yes = ConsoleExt.ReadValue<bool>("Remove it? (y/n): ", false);
+				bool yes = YesNoMenu.Ask("Remove it?");
 				if (yes == true) {
 					rules.RemoveAt(index);
 					Finish(Glossary.SaveRules(folder, rules), "Removed.");

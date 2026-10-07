@@ -132,6 +132,9 @@ namespace TranslationTools {
 			if (problem.Length == 0 && Checkpoint.IsStorable(label) == false) {
 				problem = "That label cannot be stored.";
 			}
+			if (problem.Length == 0 && AlignmentRoot.IsReservedLabel(label) == true) {
+				problem = CheckpointList.ReservedLabelProblem;
+			}
 			if (problem.Length == 0 && CheckpointList.Find(label) != null) {
 				problem = "A checkpoint is already labelled \"" + label + "\".";
 			}
@@ -300,6 +303,9 @@ namespace TranslationTools {
 				if (Checkpoint.IsStorable(label) == false) {
 					problem = "That label cannot be stored.";
 				}
+				if (problem.Length == 0 && AlignmentRoot.IsReservedLabel(label) == true) {
+					problem = CheckpointList.ReservedLabelProblem;
+				}
 				if (problem.Length == 0 && CheckpointList.Find(label) != null) {
 					problem = "A checkpoint is already labelled \"" + label + "\".";
 				}
@@ -355,7 +361,10 @@ namespace TranslationTools {
 					if (renamed == true) {
 						Console.WriteLine("Renamed to \"" + label + "\".");
 					}
-					if (renamed == false) {
+					if (renamed == false && AlignmentRoot.IsReservedLabel(label) == true) {
+						Console.WriteLine(CheckpointList.ReservedLabelProblem + " Nothing changed.");
+					}
+					if (renamed == false && AlignmentRoot.IsReservedLabel(label) == false) {
 						Console.WriteLine("That label is taken or cannot be stored. Nothing changed.");
 					}
 				}
@@ -432,8 +441,7 @@ namespace TranslationTools {
 				ConsoleExt.WaitForEnter("continue");
 			}
 			if (selected != null) {
-				bool confirmed = ConsoleExt.ReadValue<bool>(
-					"Remove \"" + selected.Label + "\" from the list? The folder stays on disk. (y/n): ", false);
+				bool confirmed = YesNoMenu.Ask("Remove \"" + selected.Label + "\" from the list? The folder stays on disk.");
 				if (confirmed == true) {
 					CheckpointList.Remove(selected.Label);
 					ProbeAllRows();
@@ -492,8 +500,8 @@ namespace TranslationTools {
 			bool looksLikeGame = state.Form == CheckpointForm.Invalid && game.IsGame == true;
 			if (looksLikeGame == true) {
 				string gameFolder = Path.GetDirectoryName(game.Archive) ?? "";
-				Console.WriteLine("That looks like the installed game's folder (" + Path.GetFileName(game.Archive) + " beside its engine), not a checkpoint.");
-				bool makeCopy = ConsoleExt.ReadValue<bool>("Make a checkpoint from it, with a copy of the archive in its own folder? (y/n): ", false);
+				bool makeCopy = YesNoMenu.Ask("Make a checkpoint from it, with a copy of the archive in its own folder?",
+					"That looks like the installed game's folder (" + Path.GetFileName(game.Archive) + " beside its engine), not a checkpoint.");
 				if (makeCopy == false) {
 					cancelled = true;
 				}
@@ -501,19 +509,12 @@ namespace TranslationTools {
 					// New checkpoint folders live under the checkpoints root as <root>\<label>.
 					// The root is asked for the first time it is needed and kept in Settings.
 					if (CheckpointsRoot.IsSet == false) {
-						Console.WriteLine("Checkpoints the tool makes go under one folder, as <folder>\\<label>.");
-						string root = ConsoleExt.ReadLine("Checkpoints folder (blank to cancel): ", -1, false).Trim().Trim('"');
-						if (root.Length == 0) {
+						bool haveRoot = CheckpointsRoot.Ask("Checkpoints the tool makes go under one folder, as <folder>\\<label>.", out string rootProblem);
+						if (haveRoot == false && rootProblem.Length == 0) {
 							cancelled = true;
 						}
-						if (root.Length > 0) {
-							try {
-								Directory.CreateDirectory(root);
-								CheckpointsRoot.Folder = Path.GetFullPath(root);
-							}
-							catch (Exception exception) {
-								problem = "Could not use that folder: " + exception.Message + " Nothing added.";
-							}
+						if (rootProblem.Length > 0) {
+							problem = rootProblem + " Nothing added.";
 						}
 					}
 					string destination = "";

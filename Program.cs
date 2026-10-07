@@ -47,6 +47,7 @@ namespace TranslationTools {
 			SelectorItem.AddOnKeyPressAction(SelectorRow.Cycle);
 			menu.AddChoice(SelectorItem.SetActionOnSelect(CheckpointsMenu.Show));
 			menu.AddChoice(new ConsoleMenuItem("Extract / Split / Join / Build").SetActionOnSelect(OperationsMenu.Show));
+			menu.AddChoice(new ConsoleMenuItem("Alignment").SetActionOnSelect(AlignmentOperation.Run));
 			menu.AddChoice(new ConsoleMenuItem("Glossaries").SetActionOnSelect(GlossariesMenu.Show));
 			menu.AddChoice(new ConsoleMenuItem("Settings").SetActionOnSelect(SettingsMenu.Show));
 			menu.AddChoice(new ConsoleMenuItem("Exit"));

@@ -154,8 +154,8 @@ namespace TranslationTools {
 		private static string ExtractSiglus(Checkpoint checkpoint, string folder) {
 			string problem = "";
 			if (SiglusCompiler.Available == false) {
-				Console.WriteLine("siglus-ssu, the compiler that reads Siglus archives, is not installed.");
-				bool install = ConsoleExt.ReadValue<bool>("Install it now? It finds or installs Python and then the compiler. (y/n): ", false);
+				bool install = YesNoMenu.Ask("Install it now? It finds or installs Python and then the compiler.",
+					"siglus-ssu, the compiler that reads Siglus archives, is not installed.");
 				if (install == true) {
 					bool installed = SiglusCompiler.Install(Console.WriteLine);
 					if (installed == false) {

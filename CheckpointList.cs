@@ -16,6 +16,9 @@ namespace TranslationTools {
 
 		private static readonly AutoListSetting<string> Store = new(StoreName);
 
+		/// <summary>The sentence shown when a label is the reserved Alignment folder's name.</summary>
+		public const string ReservedLabelProblem = "\"" + AlignmentRoot.FolderName + "\" is reserved for the alignment folder; pick another label.";
+
 		/// <summary>The label of the selected checkpoint; empty when none is selected.</summary>
 		public static string SelectedLabel {
 			get {
@@ -124,6 +127,9 @@ namespace TranslationTools {
 			if (storable == false) {
 				problem = "That label or path cannot be stored.";
 			}
+			if (problem.Length == 0 && AlignmentRoot.IsReservedLabel(checkpoint.Label) == true) {
+				problem = ReservedLabelProblem;
+			}
 			if (problem.Length == 0 && Find(checkpoint.Label) != null) {
 				problem = "A checkpoint is already labelled \"" + checkpoint.Label + "\".";
 			}
@@ -153,7 +159,8 @@ namespace TranslationTools {
 			bool replaced = false;
 			List<Checkpoint> all = All();
 			int index = IndexOf(all, oldLabel);
-			bool storable = Checkpoint.IsStorable(updated.Label) == true && Checkpoint.IsStorable(updated.Path) == true;
+			bool storable = Checkpoint.IsStorable(updated.Label) == true && Checkpoint.IsStorable(updated.Path) == true
+				&& AlignmentRoot.IsReservedLabel(updated.Label) == false;
 			bool labelFree = SameLabel(oldLabel, updated.Label) == true || Find(updated.Label) == null;
 			if (index >= 0 && storable == true && labelFree == true) {
 				all[index] = updated;

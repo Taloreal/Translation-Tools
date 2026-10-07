@@ -29,6 +29,32 @@ namespace TranslationTools {
 
 
 		/// <summary>
+		/// Asks for the root when none is set, making the folder. Called by whatever first
+		/// needs the root: Add, Fork, Align.
+		/// </summary>
+		/// <param name="why">One line saying what will go under the root.</param>
+		/// <param name="problem">Why the folder could not be used, when it could not.</param>
+		/// <returns>True when a root is set afterwards; false when cancelled or problem says why.</returns>
+		public static bool Ask(string why, out string problem) {
+			problem = "";
+			if (IsSet == false) {
+				Console.WriteLine(why);
+				string root = ConsoleExt.ReadLine("Checkpoints folder (blank to cancel): ", -1, false).Trim().Trim('"');
+				if (root.Length > 0) {
+					try {
+						Directory.CreateDirectory(root);
+						Folder = Path.GetFullPath(root);
+					}
+					catch (Exception exception) {
+						problem = "Could not use that folder: " + exception.Message;
+					}
+				}
+			}
+			return IsSet;
+		}
+
+
+		/// <summary>
 		/// Whether a label can be a folder name under the root.
 		/// </summary>
 		/// <param name="label">The label to check.</param>

@@ -122,7 +122,7 @@ namespace TranslationTools {
 			GameInstall? install = Pick("Remove which install? The game itself is not touched.");
 			if (install != null) {
 				Console.WriteLine("Checkpoints that will ask for a game again: " + UsedBy(install.Folder));
-				bool sure = ConsoleExt.ReadValue<bool>("Remove " + install.Name + " from the list? (y/n): ", false);
+				bool sure = YesNoMenu.Ask("Remove " + install.Name + " from the list?");
 				if (sure == true) {
 					GameInstallList.Remove(install.Folder);
 					Console.WriteLine("Removed.");

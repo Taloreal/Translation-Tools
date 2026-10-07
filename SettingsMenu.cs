@@ -75,13 +75,13 @@ namespace TranslationTools {
 
 
 		private static void AskReporting() {
+			string context = "";
 			if (BuildModeService.ReportingAsked == false) {
-				Console.WriteLine("A report tells the build-mode service which build mode worked for an archive:");
-				Console.WriteLine("the archive's fingerprint, hashes of its slices, its size, the game name you gave");
-				Console.WriteLine("it, the mode, and the compiler version. Nothing about you or your machine is sent.");
-				Console.WriteLine();
+				context = "A report tells the build-mode service which build mode worked for an archive:\n"
+					+ "the archive's fingerprint, hashes of its slices, its size, the game name you gave\n"
+					+ "it, the mode, and the compiler version. Nothing about you or your machine is sent.";
 			}
-			bool allow = ConsoleExt.ReadValue<bool>("Send build-mode reports? (y/n): ", false);
+			bool allow = YesNoMenu.Ask("Send build-mode reports?", context);
 			BuildModeService.ReportingAllowed = allow;
 		}
 

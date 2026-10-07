@@ -282,7 +282,7 @@ namespace TranslationTools {
 			if (name.Length > 0) {
 				bool store = true;
 				if (LlmPresetList.Find(name) != null) {
-					store = ConsoleExt.ReadValue<bool>("A preset named " + name + " exists. Replace it? (y/n): ", false);
+					store = YesNoMenu.Ask("A preset named " + name + " exists. Replace it?");
 				}
 				if (store == true) {
 					LlmPresetList.Put(LlmPreset.FromCurrent(name));
@@ -316,7 +316,7 @@ namespace TranslationTools {
 			List<LlmPreset> presets = LlmPresetList.All();
 			int picked = PagedPicker.Pick(DescribeAll(presets), "Delete which preset? (the values in use stay as they are)");
 			if (picked >= 0) {
-				bool sure = ConsoleExt.ReadValue<bool>("Delete the preset " + presets[picked].Name + "? (y/n): ", false);
+				bool sure = YesNoMenu.Ask("Delete the preset " + presets[picked].Name + "?");
 				if (sure == true) {
 					LlmPresetList.Remove(presets[picked].Name);
 					Console.WriteLine("Deleted " + presets[picked].Name + ".");
