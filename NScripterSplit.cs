@@ -28,6 +28,15 @@ namespace TranslationTools {
 		public const string StartMarker = ";<start>";
 		public const string EndMarker = ";<end>";
 
+		/// <summary>Comment that opens a choice block: the select-family command and its options.</summary>
+		public const string ChoiceStart = ";start choices";
+
+		/// <summary>Comment that closes a choice block.</summary>
+		public const string ChoiceEnd = ";end choices";
+
+		/// <summary>The commands whose quoted arguments are the player's choices, in the engine's standard forms.</summary>
+		private static readonly string[] ChoiceCommands = new string[] { "select", "selgosub", "selnum", "csel" };
+
 		/// <summary>The script's encoding. NScripter reads Shift-JIS; code page 932 is Windows' name for it.</summary>
 		public static readonly Encoding ScriptEncoding = Encoding.GetEncoding(932);
 
@@ -58,13 +67,17 @@ namespace TranslationTools {
 			}
 			if (problem.Length == 0) {
 				try {
-					List<string> lines = ReadLines(scriptPath);
+					List<string> lines = StampChoiceBlocks(ReadLines(scriptPath), out int stamped);
+					if (stamped > 0) {
+						onLine(stamped + " choice block(s) stamped so their options stay editable once translated.");
+					}
 					List<List<string>> functions = Functions(lines, out List<string> preamble);
 					Directory.CreateDirectory(Path.Combine(splitFolder, DialoguesFolder));
 					Directory.CreateDirectory(Path.Combine(splitFolder, FunctionsFolder));
 					File.WriteAllLines(Path.Combine(splitFolder, PreambleFile), preamble, ScriptEncoding);
 					List<string> functionKeys = new();
 					List<string> dialogueKeys = new();
+					List<ChoiceLocation> choices = new();
 					int dialogueLines = 0;
 					foreach (List<string> function in functions) {
 						string label = LabelOf(function[0]);
@@ -72,11 +85,14 @@ namespace TranslationTools {
 						string dialogueKey = Path.Combine(DialoguesFolder, label + ".txt");
 						functionKeys.Add(functionKey);
 						dialogueKeys.Add(dialogueKey);
-						dialogueLines += WriteFunction(function, Path.Combine(splitFolder, functionKey), Path.Combine(splitFolder, dialogueKey));
+						dialogueLines += WriteFunction(function, label, Path.Combine(splitFolder, functionKey), Path.Combine(splitFolder, dialogueKey), choices);
 					}
 					File.WriteAllLines(Path.Combine(splitFolder, FunctionKeyFile), functionKeys);
 					File.WriteAllLines(Path.Combine(splitFolder, DialogueKeyFile), dialogueKeys);
+					string checkpointFolder = Path.GetDirectoryName(Path.GetFullPath(splitFolder)) ?? splitFolder;
+					ChoiceLocations.Write(checkpointFolder, choices);
 					onLine("Split " + functions.Count + " functions, " + dialogueLines + " dialogue lines, " + preamble.Count + " preamble lines.");
+					onLine(choices.Count + " choice block(s); where they are is in " + ChoiceLocations.FileName + ".");
 				}
 				catch (Exception exception) {
 					problem = "Could not split: " + exception.Message;
@@ -209,19 +225,66 @@ namespace TranslationTools {
 		/// <summary>
 		/// Writes one function's two files.
 		/// </summary>
+		/// <param name="function">The function's lines, header first.</param>
+		/// <param name="label">The function's label, which keys both files.</param>
+		/// <param name="functionPath">Where the code goes.</param>
+		/// <param name="dialoguePath">Where the entries go.</param>
+		/// <param name="choices">Receives one location per choice block found.</param>
 		/// <returns>How many dialogue lines it held.</returns>
-		private static int WriteFunction(List<string> function, string functionPath, string dialoguePath) {
+		private static int WriteFunction(List<string> function, string label, string functionPath, string dialoguePath, List<ChoiceLocation> choices) {
 			int index = 0;
 			using (StreamWriter code = new(functionPath, false, ScriptEncoding)) {
 				using (StreamWriter dialogue = new(dialoguePath, false, ScriptEncoding)) {
 					code.WriteLine(function[0]);
 					dialogue.WriteLine(function[0]);
+					bool inChoices = false;
+					ChoiceLocation? block = null;
 					for (int at = 1; at < function.Count; at++) {
 						string line = function[at];
-						if (IsDialogue(line) == false) {
+						// Inside a stamped choice block a line holding a quoted option is an
+						// entry VERBATIM, code riding along, with the engine's English mode
+						// opened and closed inside each option's quotes. The opener and the
+						// stamps themselves are code. Each block is noted for checkpoint.choices.
+						if (line.Trim() == ChoiceStart) {
+							inChoices = true;
+							block = new ChoiceLocation();
+							block.FileKey = label;
+						}
+						if (line.Trim() == ChoiceEnd) {
+							inChoices = false;
+							if (block != null && block.Options > 0) {
+								choices.Add(block);
+							}
+							block = null;
+						}
+						if (inChoices == true && block != null && block.Command.Length == 0) {
+							block.Command = ChoiceCommandOf(line);
+						}
+						bool choiceOption = inChoices == true && line.Contains('"') == true && line.Trim() != ChoiceStart;
+						if (choiceOption == true) {
+							string pointer = PointerFor(index);
+							dialogue.WriteLine(pointer + WrapOptions(line));
+							code.WriteLine(pointer);
+							if (block != null) {
+								if (block.Options == 0) {
+									block.FirstIndex = index;
+								}
+								block.LastIndex = index;
+								// Options are quoted strings; a one-line form holds several on one line.
+								int quotes = 0;
+								foreach (char character in line) {
+									if (character == '"') {
+										quotes += 1;
+									}
+								}
+								block.Options += quotes / 2;
+							}
+							index += 1;
+						}
+						if (choiceOption == false && (inChoices == true || IsDialogue(line) == false)) {
 							code.WriteLine(line);
 						}
-						if (IsDialogue(line) == true) {
+						if (choiceOption == false && inChoices == false && IsDialogue(line) == true) {
 							string pointer = PointerFor(index);
 							string text = "`" + line.Replace("`", "");
 							string tail = "";
@@ -241,6 +304,118 @@ namespace TranslationTools {
 				}
 			}
 			return index;
+		}
+
+
+		/// <summary>
+		/// Inside a choice block, an option needs the engine's English display mode opened
+		/// and closed INSIDE its quotes - "`Choice`",*label - or a 1-byte option misreads the
+		/// label after it. Done at split, like the other repairs, so the dialogue file shows the
+		/// shape the translator keeps. Every quoted option without a backtick of its own gets the pair;
+		/// it does a Japanese option no harm, so there is no telling the two apart. One
+		/// already wrapped is untouched.
+		/// </summary>
+		public static string WrapOptions(string line) {
+			string result = line;
+			int at = 0;
+			int open = result.IndexOf('"', at);
+			while (open >= 0) {
+				int close = result.IndexOf('"', open + 1);
+				if (close < 0) {
+					open = -1;
+				}
+				if (close >= 0) {
+					string content = result.Substring(open + 1, close - open - 1);
+					if (content.Contains('`') == false) {
+						result = result.Substring(0, open + 1) + "`" + content + "`" + result.Substring(close);
+						close += 2;
+					}
+					open = result.IndexOf('"', close + 1);
+				}
+			}
+			return result;
+		}
+
+
+
+		/// <summary>
+		/// Puts ";start choices" and ";end choices" around every select-family block: the
+		/// opener line, then every following line that opens with a quote or follows a
+		/// line ending in a comma - the engine's continuation. A block already stamped is
+		/// left alone, so a re-split changes nothing.
+		/// </summary>
+		/// <param name="lines">The script's non-empty lines.</param>
+		/// <param name="stamped">How many blocks were stamped on this pass.</param>
+		/// <returns>The lines with the stamps in.</returns>
+		private static List<string> StampChoiceBlocks(List<string> lines, out int stamped) {
+			List<string> result = new();
+			stamped = 0;
+			int at = 0;
+			while (at < lines.Count) {
+				string line = lines[at];
+				bool alreadyStamped = result.Count > 0 && result[result.Count - 1].Trim() == ChoiceStart;
+				if (IsChoiceOpener(line) == true && alreadyStamped == false) {
+					result.Add(ChoiceStart);
+					result.Add(line);
+					string previous = line;
+					at += 1;
+					bool continues = at < lines.Count && ContinuesChoice(previous, lines[at]);
+					while (continues == true) {
+						result.Add(lines[at]);
+						previous = lines[at];
+						at += 1;
+						continues = at < lines.Count && ContinuesChoice(previous, lines[at]);
+					}
+					result.Add(ChoiceEnd);
+					stamped += 1;
+				}
+				if (IsChoiceOpener(line) == false || alreadyStamped == true) {
+					result.Add(line);
+					at += 1;
+				}
+			}
+			return result;
+		}
+
+
+		/// <summary>
+		/// Whether a line's command is one of the choice commands: the first word, before
+		/// any space, tab or quote, case-insensitive.
+		/// </summary>
+		private static bool IsChoiceOpener(string line) {
+			return ChoiceCommandOf(line).Length > 0;
+		}
+
+
+		/// <summary>
+		/// The choice command a line opens with, lower-cased, or empty when it is not one.
+		/// </summary>
+		private static string ChoiceCommandOf(string line) {
+			string trimmed = line.TrimStart(' ', '\t');
+			int end = 0;
+			while (end < trimmed.Length && char.IsLetter(trimmed[end]) == true) {
+				end += 1;
+			}
+			string word = trimmed.Substring(0, end).ToLowerInvariant();
+			string found = "";
+			foreach (string command in ChoiceCommands) {
+				if (word == command) {
+					found = command;
+				}
+			}
+			return found;
+		}
+
+
+		/// <summary>
+		/// Whether a line continues the choice block the previous line was in: the previous
+		/// line ended with a comma, or this line opens with a quote (an option after a bare
+		/// opener).
+		/// </summary>
+		private static bool ContinuesChoice(string previous, string line) {
+			bool commaBefore = previous.TrimEnd(' ', '\t').EndsWith(",", StringComparison.Ordinal);
+			bool optionNext = line.TrimStart(' ', '\t').StartsWith("\"", StringComparison.Ordinal);
+			return commaBefore == true || optionNext == true;
 		}
 
 

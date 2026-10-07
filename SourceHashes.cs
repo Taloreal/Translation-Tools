@@ -33,15 +33,32 @@ namespace TranslationTools {
 		}
 
 
+		/// <summary>The first line of a record taken when the master was built from these sources.</summary>
+		public const string BuiltMark = "built";
+
+		/// <summary>The first line of a record taken when the tool only wrote these sources (Extract, Join, Recover).</summary>
+		public const string WrittenMark = "written";
+
+
 		/// <summary>
-		/// Writes the record for a checkpoint's extract\ folder.
+		/// Writes the record for a checkpoint's extract\ folder. The first line says whether
+		/// the master was built from these sources or they were only written: Build may skip
+		/// its compile only on a built record, while Join's hand-edit check reads either.
 		/// </summary>
 		/// <param name="checkpointFolder">The checkpoint's folder.</param>
+		/// <param name="built">True when the master was just built from these sources.</param>
 		/// <returns>How many files were recorded.</returns>
-		public static int Write(string checkpointFolder) {
+		public static int Write(string checkpointFolder, bool built) {
 			string extract = Path.Combine(checkpointFolder, CheckpointInspector.ExtractFolder);
 			List<string> lines = Record(extract);
-			File.WriteAllLines(Path.Combine(checkpointFolder, FileName), lines, new UTF8Encoding(false));
+			List<string> file = new();
+			string mark = WrittenMark;
+			if (built == true) {
+				mark = BuiltMark;
+			}
+			file.Add(mark);
+			file.AddRange(lines);
+			File.WriteAllLines(Path.Combine(checkpointFolder, FileName), file, new UTF8Encoding(false));
 			return lines.Count;
 		}
 
@@ -53,14 +70,19 @@ namespace TranslationTools {
 		/// </summary>
 		/// <param name="checkpointFolder">The checkpoint's folder.</param>
 		/// <param name="hasRecord">False when no record exists; the result is then empty and means nothing.</param>
+		/// <param name="builtRecord">True when the record was taken at a build, so an unchanged result means the master is current.</param>
 		/// <returns>The relative paths that changed.</returns>
-		public static List<string> Changed(string checkpointFolder, out bool hasRecord) {
+		public static List<string> Changed(string checkpointFolder, out bool hasRecord, out bool builtRecord) {
 			List<string> changed = new();
+			builtRecord = false;
 			string recordPath = Path.Combine(checkpointFolder, FileName);
 			hasRecord = File.Exists(recordPath);
 			if (hasRecord == true) {
 				Dictionary<string, string> recorded = new(StringComparer.OrdinalIgnoreCase);
 				foreach (string line in File.ReadAllLines(recordPath)) {
+					if (line == BuiltMark) {
+						builtRecord = true;
+					}
 					int gap = line.IndexOf("  ");
 					if (gap > 0) {
 						recorded[line.Substring(gap + 2)] = line.Substring(0, gap);

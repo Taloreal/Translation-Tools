@@ -158,6 +158,38 @@ namespace TranslationTools {
 
 
 		/// <summary>
+		/// Moves the checkpoint with a label one place up (a negative step) or down the list,
+		/// wrapping from the top to the bottom and back. Order is the user's grouping; the
+		/// tool attaches no meaning to it.
+		/// </summary>
+		/// <param name="label">The checkpoint to move.</param>
+		/// <param name="step">-1 for up, 1 for down.</param>
+		/// <returns>True when moved; false when no entry had the label or the list has one entry.</returns>
+		public static bool Move(string label, int step) {
+			bool moved = false;
+			List<Checkpoint> all = All();
+			int index = IndexOf(all, label);
+			if (index >= 0 && all.Count > 1 && step != 0) {
+				Checkpoint moving = all[index];
+				all.RemoveAt(index);
+				// After the removal the list is one shorter: the last place is all.Count.
+				int target = index + step;
+				bool wasLast = index == all.Count;
+				if (step > 0 && wasLast == true) {
+					target = 0;
+				}
+				if (step < 0 && index == 0) {
+					target = all.Count;
+				}
+				all.Insert(target, moving);
+				Save(all);
+				moved = true;
+			}
+			return moved;
+		}
+
+
+		/// <summary>
 		/// Whether two labels count as the same: equal ignoring case and surrounding space.
 		/// </summary>
 		public static bool SameLabel(string first, string second) {

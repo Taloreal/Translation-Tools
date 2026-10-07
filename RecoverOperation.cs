@@ -15,6 +15,9 @@ namespace TranslationTools {
 	/// </summary>
 	public static class RecoverOperation {
 
+		/// <summary>True while a recovery rebuilt the master, so the record it writes counts as a build.</summary>
+		private static bool MasterRebuilt = false;
+
 		/// <summary>
 		/// Runs Recover on the selected checkpoint, printing as it goes, and pauses at the end.
 		/// </summary>
@@ -53,6 +56,7 @@ namespace TranslationTools {
 				problem = "\"" + checkpoint.Label + "\" has nothing to recover.";
 			}
 
+			MasterRebuilt = false;
 			if (problem.Length == 0 && state.Engine == CheckpointEngine.NScripter) {
 				problem = RecoverNscripter(folder, onLine);
 			}
@@ -61,6 +65,7 @@ namespace TranslationTools {
 			}
 
 			if (problem.Length == 0) {
+				SourceHashes.Write(folder, MasterRebuilt);
 				CheckpointState after = CheckpointInspector.Inspect(checkpoint.Path);
 				if (after.NeedsRecovery == true) {
 					problem = "Still needs recovery after rebuilding: " + after.Warning;
@@ -97,6 +102,7 @@ namespace TranslationTools {
 			if (problem.Length == 0 && File.Exists(master) == false) {
 				problem = NScriptArchive.EncodeFile(script, master);
 				if (problem.Length == 0) {
+					MasterRebuilt = true;
 					CheckpointLog.Warning(folder, "Recovery", "rebuilt " + NScriptArchive.ArchiveName + " from " + NScriptArchive.ScriptName);
 				}
 			}
@@ -136,8 +142,9 @@ namespace TranslationTools {
 					onLine("Warning: " + warning);
 					CheckpointLog.Warning(folder, "Recovery", warning);
 				}
-				problem = BuildOperation.BuildSiglus(checkpoint, folder, onLine);
+				problem = BuildOperation.BuildSiglus(checkpoint, folder, false, onLine);
 				if (problem.Length == 0) {
+					MasterRebuilt = true;
 					CheckpointLog.Warning(folder, "Recovery", "rebuilt Scene.pck from extract\\ - a rebuild, not the original");
 				}
 			}

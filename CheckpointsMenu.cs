@@ -12,6 +12,7 @@ namespace TranslationTools {
 
 		private static readonly ConsoleMenuItem LockItem = new("Lock this checkpoint");
 		private static readonly ConsoleMenuItem SelectorItem = new("<- no checkpoints ->");
+		private static readonly ConsoleMenuItem MoveItem = new("<- Move this checkpoint up the list / down the list ->");
 
 		/// <summary>Every row's on-disk state, probed once when the menu opens and after an action changes the list.</summary>
 		private static readonly Dictionary<string, CheckpointState> RowStates = new(StringComparer.OrdinalIgnoreCase);
@@ -25,7 +26,9 @@ namespace TranslationTools {
 			ConsoleSelectMenu menu = new(loops: true, numbered: false, clearOnRefresh: true);
 			menu.AddOnDrawMenuAction(RefreshHeader);
 			SelectorItem.AddOnKeyPressAction(SelectorRow.Cycle);
+			MoveItem.AddOnKeyPressAction(MoveSelected);
 			menu.AddChoice(SelectorItem);
+			menu.AddChoice(MoveItem);
 			menu.AddChoice(new ConsoleMenuItem("Add a checkpoint").SetActionOnSelect(AddCheckpoint));
 			menu.AddChoice(new ConsoleMenuItem("Rename this label").SetActionOnSelect(RenameLabel));
 			menu.AddChoice(new ConsoleMenuItem("Re-point this path").SetActionOnSelect(RepointPath));
@@ -38,6 +41,25 @@ namespace TranslationTools {
 			menu.AddChoice(new ConsoleMenuItem("Back"));
 			menu.GetChoice();
 			SelectorItem.RemoveOnKeyPressAction(SelectorRow.Cycle);
+			MoveItem.RemoveOnKeyPressAction(MoveSelected);
+		}
+
+
+		/// <summary>
+		/// Left moves the selected checkpoint one place up the list, Right one place down,
+		/// wrapping at either end. Enter does nothing. Order is the user's grouping only.
+		/// </summary>
+		private static void MoveSelected(ConsoleMenuItem? item, ConsoleKeyInfo key) {
+			int step = 0;
+			if (key.Key == ConsoleKey.LeftArrow) {
+				step = -1;
+			}
+			if (key.Key == ConsoleKey.RightArrow) {
+				step = 1;
+			}
+			if (step != 0) {
+				CheckpointList.Move(CheckpointList.SelectedLabel, step);
+			}
 		}
 
 

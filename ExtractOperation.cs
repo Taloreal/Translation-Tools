@@ -69,6 +69,7 @@ namespace TranslationTools {
 				Console.WriteLine("Cancelled. Nothing was changed.");
 			}
 			if (problem.Length == 0 && proceed == true) {
+				SourceHashes.Write(folder, false);
 				Console.WriteLine("Extracted into " + Path.Combine(folder, CheckpointInspector.ExtractFolder));
 			}
 			CheckpointWatch.MarkStale();

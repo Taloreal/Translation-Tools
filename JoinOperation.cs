@@ -15,13 +15,14 @@ namespace TranslationTools {
 		/// <summary>
 		/// Runs Join on the selected checkpoint, printing as it goes, and pauses at the end.
 		/// </summary>
-		public static void Run() {
+		/// <param name="backUp">True to copy extract\ into backups\ before writing over it.</param>
+		public static void Run(bool backUp) {
 			Checkpoint? checkpoint = CheckpointList.Selected();
 			string problem = "No checkpoint is selected.";
 			string folder = "";
 			if (checkpoint != null) {
 				folder = CheckpointInspector.FolderOf(checkpoint.Path);
-				problem = Join(checkpoint, Console.WriteLine);
+				problem = Join(checkpoint, backUp, Console.WriteLine);
 			}
 			if (problem.Length > 0) {
 				Console.WriteLine(problem);
@@ -40,9 +41,10 @@ namespace TranslationTools {
 		/// console. Warnings the join went ahead with are printed and logged.
 		/// </summary>
 		/// <param name="checkpoint">The checkpoint to join.</param>
+		/// <param name="backUp">True to copy extract\ into backups\ before writing over it.</param>
 		/// <param name="onLine">Receives progress and warnings.</param>
 		/// <returns>Empty on success, otherwise a plain sentence.</returns>
-		public static string Join(Checkpoint checkpoint, Action<string> onLine) {
+		public static string Join(Checkpoint checkpoint, bool backUp, Action<string> onLine) {
 			string problem = "";
 			string folder = CheckpointInspector.FolderOf(checkpoint.Path);
 			CheckpointState state = CheckpointInspector.Inspect(checkpoint.Path);
@@ -59,12 +61,30 @@ namespace TranslationTools {
 			if (problem.Length == 0 && state.Form != CheckpointForm.Split) {
 				problem = "Nothing to join: \"" + checkpoint.Label + "\" has no split.";
 			}
+			// The integrity check: a source that changed since the tool last wrote or
+			// compiled it was edited by hand in extract\, and Join is about to overwrite it
+			// with what the split holds. Said and logged, never asked - Join always
+			// overwrites; the only question is the backup, answered on the menu.
+			if (problem.Length == 0) {
+				List<string> handEdited = SourceHashes.Changed(folder, out bool hasRecord, out bool builtRecord);
+				if (hasRecord == true && handEdited.Count > 0) {
+					string warning = handEdited.Count + " file(s) in extract\\ changed since the tool last wrote them and are overwritten by this join: " + string.Join(", ", handEdited);
+					onLine("Warning: " + warning);
+					CheckpointLog.Warning(folder, "Join", warning);
+				}
+			}
+			if (problem.Length == 0 && backUp == true) {
+				problem = FolderClearing.BackUpContents(folder, new string[] { CheckpointInspector.ExtractFolder }, "extract", onLine);
+			}
+
 			if (problem.Length == 0 && state.Engine == CheckpointEngine.Siglus) {
 				problem = JoinSiglus(checkpoint, folder, onLine);
 			}
-
 			if (problem.Length == 0 && state.Engine == CheckpointEngine.NScripter) {
 				problem = JoinNscripter(folder, onLine);
+			}
+			if (problem.Length == 0) {
+				SourceHashes.Write(folder, false);
 			}
 			return problem;
 		}

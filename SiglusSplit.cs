@@ -28,6 +28,9 @@ namespace TranslationTools {
 		/// <summary>Things worth saying that are neither problems nor surprises, e.g. a label given its own versioned file.</summary>
 		public List<string> Messages = new();
 
+		/// <summary>Where each choice block's options landed, for checkpoint.choices.</summary>
+		public List<ChoiceLocation> Choices = new();
+
 		/// <summary>How many lines were classified as text and moved out.</summary>
 		public int TextLines = 0;
 
@@ -99,6 +102,7 @@ namespace TranslationTools {
 			Dictionary<string, List<LabelVersion>> versions = new(StringComparer.Ordinal);
 			List<SceneSplit> splits = new();
 			List<string> names = new();
+			List<ChoiceLocation> allChoices = new();
 			int at = 0;
 			while (problem.Length == 0 && at < scenes.Length) {
 				string name = Path.GetFileName(scenes[at]);
@@ -106,6 +110,7 @@ namespace TranslationTools {
 					SceneSplit split = SplitScene(SiglusScript.ReadScript(scenes[at]), name, versions, characters);
 					splits.Add(split);
 					names.Add(name);
+					allChoices.AddRange(split.Choices);
 					foreach (string warning in split.Warnings) {
 						warnings.Add(name + ": " + warning);
 					}
@@ -144,6 +149,9 @@ namespace TranslationTools {
 						}
 					}
 					onLine("Split " + splits.Count + " scenes: " + textLines + " text lines into " + files + " dialogue files; " + supportFiles + " support files copied.");
+					string checkpointFolder = Path.GetDirectoryName(Path.GetFullPath(splitFolder)) ?? splitFolder;
+					ChoiceLocations.Write(checkpointFolder, allChoices);
+					onLine(allChoices.Count + " choice block(s); where they are is in " + ChoiceLocations.FileName + ".");
 				}
 				catch (Exception exception) {
 					problem = "Could not write the split: " + exception.Message;
@@ -172,6 +180,13 @@ namespace TranslationTools {
 			if (quoted > 0) {
 				output.Messages.Add(quoted + " line(s) had their nametag, dialogue or narration put in quotes so the engine can show them.");
 			}
+			int stampedBlocks = StampChoiceBlocks(lines, output.Warnings, out int quotedOptions);
+			if (stampedBlocks > 0) {
+				output.Messages.Add(stampedBlocks + " choice block(s) stamped so their options stay editable once translated.");
+			}
+			if (quotedOptions > 0) {
+				output.Messages.Add(quotedOptions + " bare choice option(s) put in quotes, the form the engine takes English in.");
+			}
 			int renamed = RenameSpeakers(lines, characters);
 			if (renamed > 0) {
 				output.Messages.Add(renamed + " speaker name(s) replaced by their English name from the glossary.");
@@ -191,8 +206,24 @@ namespace TranslationTools {
 			List<ScriptLine> rewritten = new();
 			string current = "";
 			int at = -1;
+			ChoiceLocation? block = null;
 			foreach (ScriptLine line in lines) {
 				at += 1;
+				// A stamped choice block is noted for checkpoint.choices: which file its
+				// options land in, which command, the ids they take, how many there are.
+				string trimmedContent = line.Content.Trim();
+				if (trimmedContent.StartsWith(SiglusScript.ChoiceStart, StringComparison.Ordinal) == true) {
+					block = new ChoiceLocation();
+				}
+				if (trimmedContent.StartsWith(SiglusScript.ChoiceEnd, StringComparison.Ordinal) == true) {
+					if (block != null && block.Options > 0) {
+						output.Choices.Add(block);
+					}
+					block = null;
+				}
+				if (block != null && block.Command.Length == 0) {
+					block.Command = ChoiceCommandOf(line.Content);
+				}
 				// A later split starts a new working generation: an old pointer comment
 				// is replaced by the fresh one written under the label, not kept beside it.
 				bool oldPointer = SiglusScript.PointerTarget(line.Content).Length > 0;
@@ -231,6 +262,14 @@ namespace TranslationTools {
 						string tail = body.Substring(run.Length);
 						int id = nextId[current];
 						nextId[current] = id + 1;
+						if (block != null) {
+							block.FileKey = keys[current];
+							if (block.Options == 0) {
+								block.FirstIndex = id;
+							}
+							block.LastIndex = id;
+							block.Options += QuoteCount(run) / 2;
+						}
 						bodies[current].Append(SiglusScript.EntryBreak);
 						bodies[current].Append(SiglusScript.TokenFor(id));
 						bodies[current].Append(run);
@@ -505,6 +544,251 @@ namespace TranslationTools {
 				}
 			}
 			return close;
+		}
+
+
+		/// <summary>The commands whose argument list is the player's choices, from the compiler's own table.</summary>
+		private static readonly string[] ChoiceCommands = new string[] {
+			"selbtn_cancel_ready", "selbtn_cancel", "selbtn_ready", "selbtn", "selmsg_cancel", "selmsg", "sel_cancel", "sel",
+		};
+
+
+		/// <summary>
+		/// Puts "//start choices" and "//end choices" around every call to a choice command,
+		/// and quotes the bare options a pristine script writes. The block is the call's
+		/// argument list: from its opening bracket to the bracket that closes it, which may
+		/// be lines later, brackets inside quotes not counted. A block already stamped is
+		/// left alone, so a prepared script re-splits unchanged. The stamps are what keep a
+		/// translated option - a quoted ASCII string - counting as text.
+		/// </summary>
+		/// <param name="lines">The scene's lines; stamps are inserted in place.</param>
+		/// <param name="warnings">Receives a line for a call whose bracket never closes.</param>
+		/// <param name="quotedOptions">How many bare options were put in quotes.</param>
+		/// <returns>How many blocks were stamped on this pass.</returns>
+		private static int StampChoiceBlocks(List<ScriptLine> lines, List<string> warnings, out int quotedOptions) {
+			int stamped = 0;
+			quotedOptions = 0;
+			bool inStamped = false;
+			int at = 0;
+			while (at < lines.Count) {
+				string content = lines[at].Content;
+				string trimmed = content.Trim();
+				if (trimmed.StartsWith(SiglusScript.ChoiceStart, StringComparison.Ordinal) == true) {
+					inStamped = true;
+				}
+				if (trimmed.StartsWith(SiglusScript.ChoiceEnd, StringComparison.Ordinal) == true) {
+					inStamped = false;
+				}
+				bool opener = inStamped == false && IsCodeLine(content) == true && ChoiceCommandOf(content).Length > 0;
+				if (opener == true) {
+					// Find where the argument list closes.
+					int depth = 0;
+					int end = -1;
+					int scan = at;
+					while (end < 0 && scan < lines.Count) {
+						depth += BracketDepthChange(lines[scan].Content);
+						if (depth <= 0) {
+							end = scan;
+						}
+						scan += 1;
+					}
+					if (end < 0) {
+						warnings.Add("line " + (at + 1) + ": the choice call's bracket never closes; left as it is.");
+						at += 1;
+					}
+					if (end >= 0) {
+						for (int inside = at; inside <= end; inside++) {
+							lines[inside].Content = QuoteBareArguments(lines[inside].Content, out int quoted);
+							quotedOptions += quoted;
+						}
+						string indent = SiglusScript.LeadingWhitespace(content);
+						ScriptLine start = new();
+						start.Content = indent + SiglusScript.ChoiceStart;
+						start.Ending = lines[at].Ending;
+						if (start.Ending.Length == 0) {
+							start.Ending = SiglusScript.FallbackBreak;
+						}
+						ScriptLine finish = new();
+						finish.Content = indent + SiglusScript.ChoiceEnd;
+						finish.Ending = lines[end].Ending;
+						if (finish.Ending.Length == 0) {
+							lines[end].Ending = SiglusScript.FallbackBreak;
+							finish.Ending = "";
+						}
+						lines.Insert(end + 1, finish);
+						lines.Insert(at, start);
+						stamped += 1;
+						at = end + 3;
+					}
+				}
+				if (opener == false) {
+					at += 1;
+				}
+			}
+			return stamped;
+		}
+
+
+		/// <summary>
+		/// Whether a line is code rather than a comment: not opening with "//", ";" or "/*".
+		/// </summary>
+		private static bool IsCodeLine(string content) {
+			string trimmed = content.TrimStart(' ', '\t');
+			bool comment = trimmed.StartsWith("//", StringComparison.Ordinal) || trimmed.StartsWith(";", StringComparison.Ordinal)
+				|| trimmed.StartsWith("/*", StringComparison.Ordinal);
+			return comment == false;
+		}
+
+
+		/// <summary>
+		/// The choice command a line calls, or empty: the name followed by "(" with no
+		/// identifier character before it, outside any quoted string. Longest names are
+		/// tried first so "selbtn_cancel" is not read as "sel".
+		/// </summary>
+		private static string ChoiceCommandOf(string content) {
+			string found = "";
+			foreach (string command in ChoiceCommands) {
+				int from = 0;
+				while (found.Length == 0 && from < content.Length) {
+					int hit = content.IndexOf(command + "(", from, StringComparison.Ordinal);
+					if (hit < 0) {
+						from = content.Length;
+					}
+					if (hit >= 0) {
+						bool boundaryBefore = hit == 0 || IsIdentifierCharacter(content[hit - 1]) == false;
+						if (boundaryBefore == true && InsideQuotes(content, hit) == false) {
+							found = command;
+						}
+						from = hit + 1;
+					}
+				}
+			}
+			return found;
+		}
+
+
+		private static bool IsIdentifierCharacter(char character) {
+			return char.IsLetterOrDigit(character) || character == '_';
+		}
+
+
+		/// <summary>
+		/// Whether a position sits inside a quoted string on its line.
+		/// </summary>
+		private static bool InsideQuotes(string content, int index) {
+			bool inside = false;
+			for (int at = 0; at < index; at++) {
+				bool escaped = at > 0 && content[at - 1] == '\\';
+				if (content[at] == '"' && escaped == false) {
+					inside = inside == false;
+				}
+			}
+			return inside;
+		}
+
+
+		/// <summary>
+		/// Opening brackets minus closing brackets on a line, outside quoted strings.
+		/// </summary>
+		private static int BracketDepthChange(string content) {
+			int change = 0;
+			bool inside = false;
+			for (int at = 0; at < content.Length; at++) {
+				char current = content[at];
+				bool escaped = at > 0 && content[at - 1] == '\\';
+				if (current == '"' && escaped == false) {
+					inside = inside == false;
+				}
+				if (inside == false && current == '(') {
+					change += 1;
+				}
+				if (inside == false && current == ')') {
+					change -= 1;
+				}
+			}
+			return change;
+		}
+
+
+		/// <summary>
+		/// Inside a choice call, an argument written bare that holds non-ASCII text is an
+		/// option the engine shows, and the shipped form of an English option is quoted; so
+		/// the bare option is quoted here, to show the translator the shape. Anything else
+		/// in the list - variables, numbers, named arguments, quoted strings - is untouched.
+		/// </summary>
+		private static string QuoteBareArguments(string content, out int quoted) {
+			StringBuilder result = new();
+			StringBuilder argument = new();
+			quoted = 0;
+			bool inside = false;
+			int depth = 0;
+			for (int at = 0; at < content.Length; at++) {
+				char current = content[at];
+				bool escaped = at > 0 && content[at - 1] == '\\';
+				if (current == '"' && escaped == false) {
+					inside = inside == false;
+				}
+				bool separator = inside == false && (current == ',' || current == '(' || current == ')');
+				if (separator == true) {
+					result.Append(QuoteIfBareText(argument.ToString(), ref quoted));
+					argument.Clear();
+					result.Append(current);
+					if (current == '(') {
+						depth += 1;
+					}
+					if (current == ')') {
+						depth -= 1;
+					}
+				}
+				if (separator == false) {
+					argument.Append(current);
+				}
+			}
+			result.Append(QuoteIfBareText(argument.ToString(), ref quoted));
+			return result.ToString();
+		}
+
+
+		/// <summary>
+		/// Quotes an argument that holds a non-ASCII character and no quote of its own,
+		/// keeping the whitespace around it outside the quotes.
+		/// </summary>
+		private static string QuoteIfBareText(string argument, ref int quoted) {
+			string result = argument;
+			string core = argument.Trim();
+			bool bare = core.Length > 0 && core.Contains('"') == false && HasNonAscii(core) == true;
+			if (bare == true) {
+				int start = argument.IndexOf(core, StringComparison.Ordinal);
+				result = argument.Substring(0, start) + "\"" + core + "\"" + argument.Substring(start + core.Length);
+				quoted += 1;
+			}
+			return result;
+		}
+
+
+		private static bool HasNonAscii(string text) {
+			bool found = false;
+			foreach (char character in text) {
+				if ((int)character > 127) {
+					found = true;
+				}
+			}
+			return found;
+		}
+
+
+		/// <summary>
+		/// How many quote characters a run holds, for counting its options.
+		/// </summary>
+		private static int QuoteCount(string run) {
+			int count = 0;
+			for (int at = 0; at < run.Length; at++) {
+				bool escaped = at > 0 && run[at - 1] == '\\';
+				if (run[at] == '"' && escaped == false) {
+					count += 1;
+				}
+			}
+			return count;
 		}
 
 

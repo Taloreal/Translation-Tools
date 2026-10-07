@@ -52,6 +52,7 @@ MyCheckpoint\
     checkpoint.log                  what happened here, with dates
     checkpoint.info                 which game this is
     checkpoint.hashes               what the sources looked like at the last build
+    checkpoint.choices              where every choice menu is in the split
 ```
 
 Nothing else may sit at the top of the folder. If something else is there, the tool calls
@@ -134,7 +135,15 @@ Cuts the script into one file per section, with the dialogue separated from the 
 you can edit text without touching the script around it.
 
 - NScripter: `split\dialogues\` holds the lines, `split\functions\` holds the code, and two
-  key files list them in order.
+  key files list them in order. A choice menu in the engine's standard form, a `select`,
+  `selgosub`, `selnum` or `csel` command with its quoted options, is stamped with
+  `;start choices` and `;end choices`, and each option line goes into the dialogue file
+  with its `,*label` riding along so you can see it is a choice, and every option gets the
+  engine's English display mode opened and closed inside its quotes, `"`Choice`",*label`,
+  which a Japanese option is unharmed by; keep the backticks and translate between them.
+  Every block found is listed in `checkpoint.choices` at the top of the checkpoint, one
+  line each with the dialogue file, the command, the index range and the option count, so
+  you can go straight to them. A game whose choices use its own form, as TGD does, is not detected.
 - SiglusEngine: `split\` holds a working copy of every scene with each line of text
   replaced by a numbered marker, and `split\dialogues\` holds one file per section of the
   script with the lines themselves. A comment under each section in the working copy
@@ -151,6 +160,13 @@ you can edit text without touching the script around it.
   quotes to keep the engine from obeying it, such as `"-"`, is folded into the quoted line
   as plain text. Then any quoted name the checkpoint's glossary knows is replaced by its
   English name, so `【"竜臥"】` becomes `【"Ryuuga"】`; the tool says how many it renamed.
+  A choice menu, a call to `selbtn`, `sel`, `selmsg` or their `_cancel` and `_ready`
+  forms, is stamped with `//start choices` and `//end choices` around its whole argument
+  list, from the opening bracket to the one that closes it, and any option written bare
+  is put in quotes, `selbtn(花子,太郎)` becoming `selbtn("花子","太郎")`, which is the form
+  the engine takes English in. The option lines go into the dialogue file as they are,
+  code riding along; translate inside the quotes. Every block is listed in
+  `checkpoint.choices` at the top of the checkpoint.
   Lines already quoted are left as they are. An empty nametag or an unmatched bracket is
   reported and left alone. After the split it asks for a governing wrap width, see *Word
   wrap* below.
@@ -197,8 +213,9 @@ Japanese text has no spaces to break at and is never changed.
 
 ### Build - extract\ to master
 
-Rebuilds the master from `extract\`. The old master is copied into `backups\` first, every
-time.
+Rebuilds the master from `extract\`. The old master is copied into `backups\` first only
+when the *back up first* switch is on; see section 6. If nothing in `extract\` changed
+since the last build, Build says so and skips the compile.
 
 - NScripter: encodes `0.txt` into `nscript.dat`.
 - SiglusEngine: compiles the scenes with the build settings recorded at Extract. If none
@@ -230,18 +247,31 @@ notices, and nothing else runs on it until Recover has put the piece back.
   untouched `Scene.pck`.
 
 
-## 6. Start over
+## 6. The switches on Extract, Split, Join and Build
 
-Extract and Split each carry a **start over** switch, shown at the end of their menu line.
-With the operation highlighted, press **Left** or **Right** to turn it on. It is off every
-time the menu opens, and turns off again after it is used.
+Four operations carry a switch at the end of their menu line. With the operation
+highlighted, press **Left** or **Right** to flip it. Every switch is off each time the menu
+opens, and turns off again after its operation runs. They are separate on purpose:
+flipping one does nothing to the others.
 
-With it on, the operation no longer refuses a checkpoint that is already split. Instead it
-asks what to do with the split: back it up into `backups\` first, discard it, or cancel.
-Extract clears `extract\` as well; Split clears only `split\`. Then it runs as normal.
+**Start over**, on Extract and Split. With it on, the operation no longer refuses a
+checkpoint that is already split. Instead it asks what to do with the split: back it up
+into `backups\` first, discard it, or cancel. Extract clears `extract\` as well; Split
+clears only `split\`. Then it runs as normal.
 
-The switches are separate on purpose. Turning on start over for Extract does nothing to
-Split, and the other way round.
+**Back up first**, on Join and Build. These two run many times in a day, so they never ask
+anything: Join always writes over `extract\`, Build always replaces the master. With the
+switch on, a copy is taken into `backups\` first, `extract\` for Join, the master for
+Build. With it off, nothing is copied. Taking a backup is the deliberate act, not skipping
+one.
+
+**The integrity check.** The tool keeps a record of the sources in `extract\` as they were
+when it last wrote or compiled them, in `checkpoint.hashes`. Build compares before
+compiling: if nothing changed, it says the master is already current and skips the
+compile, which for SiglusEngine is the slow step. Join compares before writing: a file
+that changed in `extract\` since the tool last touched it was edited there by hand, and
+Join says which files it is about to overwrite, in the log as well, so the edit can be
+fetched from a backup if it mattered. It does not stop.
 
 
 ## 7. The Checkpoints menu
@@ -249,7 +279,11 @@ Split, and the other way round.
 Press **Enter** on the selector line.
 
 - **Add a checkpoint** - section 4.
-- **Rename this label** - a new name; blank keeps the old one.
+- **Rename this label** - a new name; blank keeps the old one. The folder is not renamed.
+- **Move this checkpoint up the list / down the list** - with this row highlighted,
+  **Left** moves the selected checkpoint one place up and **Right** one place down,
+  wrapping at either end, so related checkpoints can sit together. Order means nothing
+  to the tool.
 - **Re-point this path** - the same checkpoint, a different folder.
 - **Lock / Unlock this checkpoint** - a locked checkpoint is refused by every operation.
   A checkpoint that needs recovery cannot be unlocked by hand.

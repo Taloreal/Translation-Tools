@@ -13,10 +13,14 @@ namespace TranslationTools {
 	/// </summary>
 	public static class BuildOperation {
 
+		/// <summary>True after a Build that found nothing changed and skipped the compile.</summary>
+		public static bool LastBuildSkipped = false;
+
 		/// <summary>
 		/// Runs Build on the selected checkpoint, printing as it goes, and pauses at the end.
 		/// </summary>
-		public static void Run() {
+		/// <param name="backUp">True to copy the master into backups before replacing it.</param>
+		public static void Run(bool backUp) {
 			Checkpoint? checkpoint = CheckpointList.Selected();
 			string problem = "No checkpoint is selected.";
 			string folder = "";
@@ -37,14 +41,14 @@ namespace TranslationTools {
 					}
 				}
 				if (problem.Length == 0) {
-					problem = Build(checkpoint, Console.WriteLine);
+					problem = Build(checkpoint, backUp, Console.WriteLine);
 				}
 			}
 			if (problem.Length > 0) {
 				Console.WriteLine(problem);
 				CheckpointLog.Error(folder, "Build", problem);
 			}
-			if (problem.Length == 0) {
+			if (problem.Length == 0 && LastBuildSkipped == false) {
 				Console.WriteLine("Built the master from extract\\.");
 			}
 			CheckpointWatch.MarkStale();
@@ -57,10 +61,12 @@ namespace TranslationTools {
 		/// console.
 		/// </summary>
 		/// <param name="checkpoint">The checkpoint to build.</param>
+		/// <param name="backUp">True to copy the master into backups before replacing it.</param>
 		/// <param name="onLine">Receives progress and the compiler's output.</param>
 		/// <returns>Empty on success, otherwise a plain sentence.</returns>
-		public static string Build(Checkpoint checkpoint, Action<string> onLine) {
+		public static string Build(Checkpoint checkpoint, bool backUp, Action<string> onLine) {
 			string problem = "";
+			LastBuildSkipped = false;
 			string folder = CheckpointInspector.FolderOf(checkpoint.Path);
 			CheckpointState state = CheckpointInspector.Inspect(checkpoint.Path);
 
@@ -76,16 +82,29 @@ namespace TranslationTools {
 			if (problem.Length == 0 && state.Form == CheckpointForm.Packed) {
 				problem = "Nothing to build from: extract\\ holds no sources. Extract first.";
 			}
-
-			if (problem.Length == 0 && state.Engine == CheckpointEngine.NScripter) {
-				problem = BuildNscripter(folder, onLine);
+			// The integrity check: sources exactly as last recorded, and a master present,
+			// mean the master already reflects them. The slow step is skipped, not refused.
+			bool masterPresent = File.Exists(Path.Combine(folder, MasterName(state.Engine)));
+			if (problem.Length == 0 && masterPresent == true) {
+				List<string> changed = SourceHashes.Changed(folder, out bool hasRecord, out bool builtRecord);
+				if (hasRecord == true && builtRecord == true && changed.Count == 0) {
+					onLine("Nothing in extract\\ changed since the last build; the master is current.");
+					LastBuildSkipped = true;
+				}
+				if (hasRecord == true && changed.Count > 0) {
+					onLine(changed.Count + " file(s) changed since the last build.");
+				}
 			}
-			if (problem.Length == 0 && state.Engine == CheckpointEngine.Siglus) {
-				problem = BuildSiglus(checkpoint, folder, onLine);
+
+			if (problem.Length == 0 && LastBuildSkipped == false && state.Engine == CheckpointEngine.NScripter) {
+				problem = BuildNscripter(folder, backUp, onLine);
+			}
+			if (problem.Length == 0 && LastBuildSkipped == false && state.Engine == CheckpointEngine.Siglus) {
+				problem = BuildSiglus(checkpoint, folder, backUp, onLine);
 			}
 
-			if (problem.Length == 0) {
-				int recorded = SourceHashes.Write(folder);
+			if (problem.Length == 0 && LastBuildSkipped == false) {
+				int recorded = SourceHashes.Write(folder, true);
 				onLine("Recorded " + recorded + " source file hashes for the integrity check.");
 				CheckpointLog.Warning(folder, "Build", "built the master from extract\\");
 			}
@@ -189,10 +208,13 @@ namespace TranslationTools {
 		/// <summary>
 		/// NScripter: back the master up, then encode extract\0.txt over it.
 		/// </summary>
-		private static string BuildNscripter(string folder, Action<string> onLine) {
+		private static string BuildNscripter(string folder, bool backUp, Action<string> onLine) {
 			string master = Path.Combine(folder, NScriptArchive.ArchiveName);
 			string script = Path.Combine(folder, CheckpointInspector.ExtractFolder, NScriptArchive.ScriptName);
-			string problem = BackUpMaster(folder, master, onLine);
+			string problem = "";
+			if (backUp == true) {
+				problem = BackUpMaster(folder, master, onLine);
+			}
 			if (problem.Length == 0) {
 				onLine("Encoding " + NScriptArchive.ScriptName + " into " + NScriptArchive.ArchiveName + "...");
 				problem = NScriptArchive.EncodeFile(script, master);
@@ -205,7 +227,7 @@ namespace TranslationTools {
 		/// Siglus: compile extract\ to a new archive beside the backups, and only then move it
 		/// over the master. A compile that fails leaves the master untouched.
 		/// </summary>
-		public static string BuildSiglus(Checkpoint checkpoint, string folder, Action<string> onLine) {
+		public static string BuildSiglus(Checkpoint checkpoint, string folder, bool backUp, Action<string> onLine) {
 			string problem = "";
 			if (SiglusCompiler.Available == false) {
 				problem = SiglusCompiler.NotInstalledMessage;
@@ -226,7 +248,7 @@ namespace TranslationTools {
 				onLine("Compiling extract\\ with " + SiglusCompiler.Version() + "...");
 				problem = SiglusCompiler.Compile(extract, built, buildMode, onLine);
 			}
-			if (problem.Length == 0) {
+			if (problem.Length == 0 && backUp == true) {
 				problem = BackUpMaster(folder, master, onLine);
 			}
 			if (problem.Length == 0) {
@@ -250,6 +272,15 @@ namespace TranslationTools {
 				try { File.Delete(built); } catch (Exception) { }
 			}
 			return problem;
+		}
+
+
+		private static string MasterName(CheckpointEngine engine) {
+			string name = "Scene.pck";
+			if (engine == CheckpointEngine.NScripter) {
+				name = NScriptArchive.ArchiveName;
+			}
+			return name;
 		}
 
 
