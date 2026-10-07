@@ -1,0 +1,3 @@
+[submodule "lib/TALOREAL_NETCORE_API"]
+	path = lib/TALOREAL_NETCORE_API
+	url = https://github.com/Taloreal/TALOREAL_NETCORE_API.git

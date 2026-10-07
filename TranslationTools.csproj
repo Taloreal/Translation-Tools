@@ -8,7 +8,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\NScripter Tools\ETP TOOLS\TALOREAL_NETCORE_API\TALOREAL_NETCORE_API.csproj" />
+    <ProjectReference Include="lib\TALOREAL_NETCORE_API\TALOREAL_NETCORE_API.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The library is a submodule under lib\ and is built through the reference above;
+         its sources must not also be swept into this project by the default glob. -->
+    <Compile Remove="lib\**" />
+    <None Remove="lib\**" />
+    <EmbeddedResource Remove="lib\**" />
   </ItemGroup>
 
   <ItemGroup>

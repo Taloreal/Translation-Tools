@@ -11,6 +11,9 @@ you for.
 
 This manual grows with the tool. Where something is not built yet, it says so.
 
+This is the manual for running the tool. Building it from source is covered in `README.md`
+in the source repository.
+
 
 ## 1. The words the tool uses
 

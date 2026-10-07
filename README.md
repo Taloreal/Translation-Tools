@@ -17,10 +17,35 @@ builds of a game: extract, split, edit, join, build, run.
 Nothing else third-party is bundled. NScripter's `nscript.dat` is decoded and encoded by
 the tool itself.
 
-## Building
+## Building from source
 
-Open `TranslationTools.sln` in Visual Studio. The project references the
-`TALOREAL_NETCORE_API` library by relative path. Copy `Secrets.cs.sample` to `Secrets.cs`
-and fill it in before building; it is ignored by git.
+You need the .NET 9 SDK (https://dotnet.microsoft.com/download). Visual Studio is optional.
+
+1. Clone with the submodule. The `TALOREAL_NETCORE_API` library lives in its own repository
+   and is pulled in under `lib\`:
+
+   ```
+   git clone --recurse-submodules https://github.com/Taloreal/TranslationTools.git
+   ```
+
+   If you cloned without the flag, `lib\TALOREAL_NETCORE_API` is empty; fill it with:
+
+   ```
+   git submodule update --init
+   ```
+
+2. Copy `Secrets.cs.sample` to `Secrets.cs` in the project folder. Leave its two values
+   empty unless you run your own build-mode service: with them empty the tool builds and
+   runs, the shared list of known games is simply unavailable and reporting stays off. The
+   file is ignored by git, so it is never committed.
+
+3. Build:
+
+   ```
+   dotnet build TranslationTools.csproj
+   ```
+
+   or open `TranslationTools.sln` in Visual Studio and build there. The exe, the manual, the
+   compiler installer and the bundled engine land in `bin\Debug\net9.0\`.
 
 The service the tool reports build modes to is not part of this repository.
