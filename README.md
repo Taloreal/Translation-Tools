@@ -17,6 +17,14 @@ builds of a game: extract, split, edit, join, build, run.
 Nothing else third-party is bundled. NScripter's `nscript.dat` is decoded and encoded by
 the tool itself.
 
+## Releases
+
+A release is a zip on the repository's Releases page, built self-contained for 64-bit
+Windows: unzip it anywhere and run `TranslationTools.exe`. Nothing has to be installed
+first, not even .NET; the tool fetches the SiglusEngine compiler itself when a Siglus game
+needs it. The manual, `MANUAL.md`, is in the zip beside the exe. The version is the
+four-part number on the release tag, `v0.1.0.0` for the first alpha.
+
 ## Building from source
 
 You need the .NET 9 SDK (https://dotnet.microsoft.com/download). Visual Studio is optional.
@@ -25,7 +33,7 @@ You need the .NET 9 SDK (https://dotnet.microsoft.com/download). Visual Studio i
    and is pulled in under `lib\`:
 
    ```
-   git clone --recurse-submodules https://github.com/Taloreal/TranslationTools.git
+   git clone --recurse-submodules https://github.com/Taloreal/Translation-Tools.git
    ```
 
    If you cloned without the flag, `lib\TALOREAL_NETCORE_API` is empty; fill it with:
