@@ -23,6 +23,8 @@ namespace TranslationTools {
 		private const string AddressKey = "Llm.Address";
 		private const string ModelKey = "Llm.Model";
 		private const string ApiKeyKey = "Llm.ApiKey";
+		private const string FromLanguageKey = "Llm.FromLanguage";
+		private const string ToLanguageKey = "Llm.ToLanguage";
 		private const string TemperatureKey = "Llm.Temperature";
 		private const string MaxTokensKey = "Llm.MaxTokens";
 		private const string TimeoutKey = "Llm.TimeoutSeconds";
@@ -63,6 +65,18 @@ namespace TranslationTools {
 		public static string Model {
 			get { return ReadValue(ModelKey, "").Trim(); }
 			set { Settings.SetValue(ModelKey, value.Trim()); }
+		}
+
+		/// <summary>The language the source text is in, as a plain word for a prompt; blank when not set. Belongs to the model, not to any checkpoint.</summary>
+		public static string FromLanguage {
+			get { return ReadValue(FromLanguageKey, "").Trim(); }
+			set { Settings.SetValue(FromLanguageKey, value.Trim()); }
+		}
+
+		/// <summary>The language the translation is written in, as a plain word for a prompt; blank when not set.</summary>
+		public static string ToLanguage {
+			get { return ReadValue(ToLanguageKey, "").Trim(); }
+			set { Settings.SetValue(ToLanguageKey, value.Trim()); }
 		}
 
 		/// <summary>Sent as "Authorization: Bearer ..." when not blank. A local KoboldCpp needs none; a hosted backend does.</summary>

@@ -64,6 +64,23 @@ namespace TranslationTools {
 
 
 		/// <summary>
+		/// The convention a checkpoint's files are read with: TGD's under the TGD switch,
+		/// otherwise the one stored on the checkpoint, or null when none was learned.
+		/// </summary>
+		public static NametagConvention? For(Checkpoint checkpoint) {
+			NametagConvention? convention = null;
+			if (TgdFeatures.Enabled == true) {
+				convention = Tgd();
+			}
+			if (TgdFeatures.Enabled == false) {
+				CheckpointInfo info = CheckpointInfo.Load(CheckpointInspector.FolderOf(checkpoint.Path));
+				convention = FromStored(info.SpeakerTag);
+			}
+			return convention;
+		}
+
+
+		/// <summary>
 		/// The convention a checkpoint stored: its two tag characters, opener then closer.
 		/// Null when nothing is stored.
 		/// </summary>
@@ -306,22 +323,10 @@ namespace TranslationTools {
 
 
 		/// <summary>
-		/// Whether a name is a glossary character's, by its script name, its translated name
-		/// or an alias, ignoring case.
+		/// Whether a name is any of a glossary character's names, ignoring case.
 		/// </summary>
 		private static bool InGlossary(string name, List<CharacterEntry> characters) {
-			bool found = false;
-			foreach (CharacterEntry entry in characters) {
-				if (found == false && (string.Equals(entry.Jp, name, StringComparison.OrdinalIgnoreCase) || string.Equals(entry.En, name, StringComparison.OrdinalIgnoreCase))) {
-					found = true;
-				}
-				foreach (string alias in entry.Aliases.Split(',')) {
-					if (found == false && alias.Trim().Length > 0 && string.Equals(alias.Trim(), name, StringComparison.OrdinalIgnoreCase)) {
-						found = true;
-					}
-				}
-			}
-			return found;
+			return Glossary.Find(characters, name) != null;
 		}
 
 

@@ -292,7 +292,12 @@ folder per pair, named by the moment it was made; no checkpoint can be labelled
 **reference**: the side that is read and never edited, and that is locked. If one of the
 two is locked, that is the reference. If neither is, you name it and it is locked for you.
 If both are, nothing could be edited and the pair is refused. A sound checkpoint that is
-not split yet is offered a split on the spot; declining cancels the pair. Then you pick the
+not split yet is offered a split on the spot; declining cancels the pair. A pair walks on
+one glossary, so both checkpoints must hold the same one: when they differ, you pick
+whose glossary is copied over the other's, the rows naming which is replaced, or cancel
+the pair. The same check runs every time a walk opens, since the two can drift through
+the Characters menu between sessions, and anything the walk itself learns is written to
+both. Then you pick the
 dialogue file on the editable side, and the tool asks whether the reference's file of the
 same name is the one to read; say no, or have no such file, and the reference's own list
 opens so you pick the scene wherever that version keeps it. A pair whose two sides name
@@ -306,6 +311,9 @@ opens to its facts and progress, with three choices:
 - **Walk the lines** starts the walk, or resumes it where it stopped. Every answer is
   written at once to `pairing.txt` in the pair folder, so closing the window loses
   nothing.
+- **Repair speaker tags from the alignment** is offered once the walk is complete: you
+  name whose tags are the standard and the other side's tags are made to agree, pair by
+  pair. Described under "The walk" below.
 - **Reset progress** forgets every decision for the file at once, for when a mistake
   early on is noticed late.
 - **Back**.
@@ -388,19 +396,24 @@ per position, the screen says so while it thinks, and it is left alone for the r
 the session after two failed replies. It only ever recommends; you rule on every line.
 
 Speaker tags are optional and never assumed. By default the walk treats every line of a
-checkpoint as untagged. **Speaker tags...** on the Alignment menu lets you teach a
-checkpoint from one of its own dialogue files: pick the checkpoint, pick a file with plenty
-of spoken lines, and the tool looks for a punctuation pair that opens lines with a name
-between its marks. With a filled character glossary, five lines naming two known characters
-prove it. Without one the tool wants twice the evidence, ten lines and four different names
-each appearing twice, since a cast repeats and speech does not; a file too short for that is
-the wrong file to teach from. It shows what it found, asks the
-model once whether the rule reads right, and stores the rule only after your yes, in the
-checkpoint's own info file. The checkpoint's character glossary helps: a pair whose
-enclosed text is a name the glossary knows, in either language or an alias, counts even
-in a short file. The same submenu copies the tag to another checkpoint of the same game,
-takes it from one, or forgets it. Where both sides of a pair have been taught, a line that names a speaker against a line that does not is evidence: a model
-"same line" there is marked doubtful, and the prompt tells the model so too.
+checkpoint as untagged. A checkpoint learns its tag, and then its cast, under
+**Glossaries → Learning** (section 9), before any pair is made. Where both sides of a pair
+have been taught, a line that names a speaker against a line that does not is evidence: a
+model "same line" there is marked doubtful, and the prompt tells the model so too.
+
+**Repairing speaker tags from the alignment.** The walk walks; it never repairs. Once a
+pair's alignment is complete, the pair's menu offers **Repair speaker tags from the
+alignment**: you say whose tags are the standard, by label, since which glossary is the
+standard is your knowledge and not the lock's, and the tool goes down every recorded
+pair. Each pair was ruled to be one line, so it has one speaker: the standard line's tag
+names a character through the shared glossary, and the other line is made to agree,
+its tag rewritten to the character's written name, added where it had none, or removed
+where the standard line is narration. One line at a time, on whichever side is being
+repaired, locked or not: the lock guards the text against hand edits, and alignment is a
+known change that touches only the tag. Lines recorded as only on one side are skipped,
+a standard tag the glossary does not know is left alone and counted, and the report
+gives every count and goes to both checkpoints' logs. The row refuses until the
+pairing says complete, and until both sides have a speaker tag learned.
 
 Under a debugger, TGD's own anchors become available: lines whose nametags name the same
 character, through the glossary, pair without asking. They are a switch in Settings,
@@ -465,18 +478,152 @@ Both are plain text you can edit by hand. A character file is named lines, then 
 `Profile:` line, then free lines to the end:
 
 ```
-Jp=竜臥
-En=Ryuuga
-Aliases=Ryuu, big brother
+Names=Ryuuga, 竜臥, Ryuu, big brother
+Writes=Ryuuga
 Role=the protagonist
 Notes=
 Profile:
 Speaks bluntly. Never uses honorifics with his sister.
 ```
 
-- **Characters...** - list, add, change one field, remove.
-- **Translation rules...** - list, add, change, move up or down, remove. The list is
-  numbered; a rule is picked by its number.
+A character is a list of names, with no language attached to any of them: every form
+any script or version uses for that person, in whatever languages your project has.
+One of them, `Writes`, is the name the translation writes; the file is named by that
+name in hex. Files from older builds, with `Jp`, `En` and `Aliases` lines, still read
+and are rewritten in this shape the next time they are saved.
+
+**A name belongs to one character only.** Saving a character whose name another already
+has is refused, naming the clash. If two files on disk hold the same name anyway, from
+hand editing, say, the tool drops that name from both when it reads the glossary, writes
+the repair back, logs it, and shows it at the top of the Characters menu.
+
+**The files follow the glossary.** Every speaker tag in the checkpoint's dialogue files
+carries the written name of its character. Whenever you add a character, change its
+names or pick a different name to write, the tool rewrites every tag of that character
+to the written name and tells you how many lines in how many files changed. It needs
+the checkpoint's speaker tag to find them (section 7): without one, the entry is saved
+and the report says no file was touched. A locked checkpoint refuses a change that
+would rewrite its files, and says so. Only the name's own characters change, so a tag
+that carries more than the name, `[name, voiceid]` say, keeps its other fields. On a
+SiglusEngine checkpoint the name is always written in double quotes, `["name", voiceid]`,
+because Siglus wants its text quoted and quotes in a tag are harmless; on NScripter it
+is written bare.
+
+- **Characters...** - list, add, change, remove, remove every character. The list shows
+  each character's written name, how many other names it has, and how many dialogue
+  lines it speaks in this checkpoint once a speaker tag is learned. Adding takes
+  the names on one comma-separated line, then asks which one the translation writes
+  when there is more than one. Changing a character opens its fields; **Names** is its
+  own small menu: add a name (offered as the written one, starting at no), respell a
+  name (its speaker tags follow the new spelling), remove one (never the written
+  one), or split one off as its own character, for when a merge put two people under
+  one entry. Each of those saves and conforms the files at once. A split corrects the
+  glossary only: tags the earlier merge already rewrote keep the written name they
+  were given, and a fresh split of the archive is what restores them. "Remove every character"
+  asks once, with the count: there is no undo. Two rows use the model's "Translate to"
+  language (section 10) and refuse until it is set:
+  - **Let the model pick each written name the <language> way** asks, per character,
+    which of the names it already has is the standard way to display that person to
+    readers of the target language: the everyday short form, usually the given name,
+    with a full name only when it is the only one or when the name is itself a title
+    that carries standing. The model only chooses among existing names; an answer that
+    is none of them changes nothing. Each change saves and conforms, and the summary
+    goes to the log.
+  - **Suggest a <language> name for each character, one at a time** first asks whether
+    a name already fits readers of the target language, and only when none does, asks
+    for the name a translation would use, transliterated or translated as those readers
+    would expect. Every suggestion is yours: add it as the written name, add it as
+    another name, skip, or stop the pass. The model sees names only, never notes or
+    profiles.
+- **Translation rules...** - list, add, change, move up or down, remove, remove every
+  rule (asks once, with the count). The list is numbered; a rule is picked by its number.
+- **Learning...** - the two things a checkpoint learns from its own dialogue files, in
+  this order, before any alignment pair is made. See below.
+
+### Learning: the cast from VNDB, the speaker tag, then the names
+
+**The cast from VNDB** comes first when the game has a VNDB id, which Extract records
+when the game is picked from VNDB's list. One request fetches every character VNDB
+lists for the game: the romanised name, the original-script name, VNDB's aliases, its
+role word for this game (main, primary, side, appears) and its description, with
+VNDB's markup removed.
+
+VNDB's names are whole strings in no fixed shape, so the tool does not split them
+itself. For each character in turn it asks the model one short question carrying only
+that character's names, nothing else, for every form a script might use: the given
+name, the surname, the full name either way round, with or without a space, in each
+language, and the nicknames, the romanised given name first. One character per
+question, so nothing can be mixed between them. The screen shows which character is
+being asked about and how long it took; an answer with no usable form keeps VNDB's own
+strings for that character, and two failed answers in a row stop the asking for the
+rest of the cast. Once every character is done, any form two characters share, a
+family's surname, is dropped from all of them and reported.
+
+The merge is then automatic, because VNDB has already settled who each entry is: a
+VNDB character matching a glossary character by any form gets the missing forms, and a
+role or profile where those were empty; one matching nothing becomes a new character
+whose written name is the romanised given name, marked **provisional**. The script is
+the authority on what a character is called, so the first script tag that joins a
+provisional character, through the names pass below or the walk's learn offer, becomes
+the written name without a question and clears the mark; picking a written name by hand
+clears it too. A form another character already holds is refused by the clash rule and
+listed, never forced. The report prints one line per character and the totals, and goes
+to the checkpoint log. A filled cast also makes the speaker-tag learner's job easy.
+
+**The speaker tag** is how this checkpoint's dialogue lines mark who is speaking. Pick a
+file with plenty of spoken lines, and the tool looks for a punctuation pair that opens
+lines with a name between its marks. The closer is whatever punctuation follows the
+name, so a tag that carries more than the name, `[name, voiceid]`, learns as `[` and the
+comma, and only the name is ever read from it. With a filled character glossary, five
+lines naming two known characters prove a pair. Without one the tool wants twice the
+evidence, ten lines and four different names each appearing twice, since a cast repeats
+and speech does not; a file too short for that is the wrong file to teach from. It shows
+what it found, asks the model once whether the rule reads right, and stores the rule only
+after your yes, in the checkpoint's own info file. The same menu copies the tag to
+another checkpoint of the same game, takes it from one, or forgets it.
+
+**The names** are learned by scanning every dialogue file through that tag. Each name
+the tags carry is counted, and spellings differing only in case are one name. Before
+anything is listed, the pass settles what needs no pick, printing one line for each:
+
+- A tag that is exactly one of a character's names is that character. If the character
+  was provisional from VNDB, the script's tag becomes the written name, the commonest
+  tag first when several match.
+- A tag that is part of one of a character's names, or holds one, is that character
+  when the match has no rival: exactly one glossary character has a covering name
+  (so "Jo" fails against Josh and Jonathan); that character's covering names are one
+  shape once spaces are ignored (so 相田ゆずか in three spacings is one name, while
+  晴男 and 西崎晴男 are two, and 男 fails); and no other tag in the same scan contains
+  it (so "Jos" fails when the script also tags "Joshua": a fuller form in the script is
+  evidence the short one is someone else). VNDB is trusted otherwise: a short tag with
+  one covering name and no rival is a high-probability match. Romanised tags, Latin
+  letters only, are never matched this way: a letter carries nothing on its own, where
+  a kana or a kanji is a syllable or a word, so sharing a run of them means something.
+
+- A numbered family of extras, 幹部A and 幹部B, or 刑事1 and 刑事2, is one new
+  character per member, with the role field reading "unnamed role: 幹部". A script never
+  means one person by two numbers, so there is nothing to ask. The ending may be
+  half-width or full-width, and a tag that differs only in that width is the same
+  member. A stem with a single numbered tag is not a family and stays in the list.
+  Family tags are left out of the "fuller form" test above, so a lone 刑事 is judged on
+  its own.
+
+What is left is listed most spoken first, with how many lines and files each has. You
+settle them one at a time: pick a name, see its counts and a few of its lines, and
+choose:
+
+- **New character** - a one-name entry, written as the tag reads.
+- **Add to <character>** - the model's suggestion, when the glossary is not empty and
+  the model named someone: it is shown with its reason, never acted on by itself. The
+  name joins that character's list, and you are asked whether it becomes the name the
+  translation writes, starting at no.
+- **Add to another character...** - the same, with the character picked from the list.
+- **Skip** - back to the list.
+
+Nothing is added all at once: every name is a decision about who it is. A name joining a
+character conforms the files like any other names change (above). A clash with a third
+character is refused by name. Back on the list ends the pass; run it again any time, and
+only names still unknown are listed.
 - **Copy this glossary to another checkpoint** - pick the target; its own glossary is
   replaced after a question that says what it loses.
 - **Take the glossary from a checkpoint of the same game** - finds another checkpoint of
@@ -513,7 +660,12 @@ Extract asks the game on both engines now, so every checkpoint can carry one.
   item shows its value and changes it when chosen; a blank answer keeps what is there.
   **Address**, **Model** and **API key** open a small menu: built-in address or type a
   new one; pick a model from the endpoint's list, type a name, or send none; type a key
-  or send none. The key is shown with its middle starred. **Endpoint** switches
+  or send none. The key is shown with its middle starred. **Translate from** and
+  **Translate to** name the source and target languages as plain words, through a menu
+  of common languages, a typed one, or not set. They belong to the model, not to any
+  checkpoint, so they hold across every checkpoint and pair; they tell the model what it
+  is translating, and the glossary's language rows (section 9) use the target one. A
+  preset does not carry them. **Endpoint** switches
   between `/v1/chat/completions` and `/v1/completions`. **Context lines before / after**
   (0 to 50 each, 5 to start) are how much of the script the model sees around the line
   it is asked about: more is better judgement, fewer is faster. **Test the connection**

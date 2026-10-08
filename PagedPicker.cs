@@ -20,8 +20,9 @@ namespace TranslationTools {
 		/// </summary>
 		/// <param name="rows">One line of text per item.</param>
 		/// <param name="title">Printed above the page.</param>
+		/// <param name="backLabel">What the last row says; "Back" unless leaving means something more specific, like "Do not copy".</param>
 		/// <returns>The picked row's index, or -1.</returns>
-		public static int Pick(List<string> rows, string title) {
+		public static int Pick(List<string> rows, string title, string backLabel = "Back") {
 			int picked = -1;
 			if (rows.Count == 0) {
 				Console.WriteLine("Nothing to list.");
@@ -79,7 +80,7 @@ namespace TranslationTools {
 				foreach (ConsoleMenuItem slot in slots) {
 					menu.AddChoice(slot);
 				}
-				menu.AddChoice(new ConsoleMenuItem("Back"));
+				menu.AddChoice(new ConsoleMenuItem(backLabel));
 				menu.GetChoice();
 			}
 			return picked;

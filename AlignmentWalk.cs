@@ -29,11 +29,27 @@ namespace TranslationTools {
 		/// <summary>The editable checkpoint's folder for the current walk, where a learned speaker is written.</summary>
 		private static string editFolder = "";
 
+		/// <summary>The editable checkpoint of the current walk, whose files a learned speaker conforms.</summary>
+		private static Checkpoint? editCheckpoint = null;
+
+		/// <summary>The reference checkpoint's folder for the current walk, whose glossary is kept identical to the editable's.</summary>
+		private static string refFolder = "";
+
 		/// <summary>How many paired lines have shown each pair of differing tags, keyed "edit tag|reference tag". Other lines between do not reset it.</summary>
 		private static readonly Dictionary<string, int> pendingPairs = new();
 
 		/// <summary>The tag pairs the user declined to learn this walk, so they are not asked again.</summary>
 		private static readonly HashSet<string> declinedPairs = new();
+
+
+		/// <summary>
+		/// After two lines were paired, by whatever witness. The walk walks: a differing
+		/// spelling goes to the gated alias learning, and nothing is repaired here. Speaker
+		/// tags that disagree are the speaker repair's business, once the alignment is done.
+		/// </summary>
+		private static void AfterPairing(AlignmentLine a, AlignmentLine b) {
+			NoteSpeakerMismatch(a, b);
+		}
 
 
 		/// <summary>
@@ -110,8 +126,9 @@ namespace TranslationTools {
 
 		/// <summary>
 		/// Offers to record two tags as one character: onto the glossary entry that already
-		/// carries either name, or as a new entry. The reference side's tag becomes the
-		/// script name when the entry is new; the editable side's becomes the translated one.
+		/// carries either name, or as a new entry whose written name is the editable side's
+		/// tag. A name joining an existing character is offered as its written name, and the
+		/// editable checkpoint's files are conformed to whatever was decided.
 		/// </summary>
 		private static bool OfferToLearn(string editName, string refName, string verdict, string reason, int count) {
 			string modelLine = "The model says they are one name: " + reason;
@@ -120,54 +137,64 @@ namespace TranslationTools {
 			}
 			bool learn = YesNoMenu.Ask("Learn " + refName + " = " + editName + " as one character in the glossary?",
 				count + " paired line(s) had " + editName + " on one side and " + refName + " on the other.\n" + modelLine, verdict == "yes");
-			if (learn == true) {
-				CharacterEntry? entry = null;
-				foreach (CharacterEntry known in cast) {
-					if (entry == null && (Names(known, editName) == true || Names(known, refName) == true)) {
-						entry = known;
+			if (learn == true && editCheckpoint != null) {
+				CharacterEntry? entry = Glossary.Find(cast, editName);
+				if (entry == null) {
+					entry = Glossary.Find(cast, refName);
+				}
+				string replaces = "";
+				List<string> added = new();
+				if (entry != null) {
+					replaces = entry.Written;
+					if (entry.Add(editName) == true) {
+						added.Add(editName);
+					}
+					if (entry.Add(refName) == true) {
+						added.Add(refName);
 					}
 				}
 				if (entry == null) {
 					entry = new CharacterEntry();
-					entry.Jp = refName;
-					entry.En = editName;
+					entry.Written = editName;
+					entry.Add(editName);
+					entry.Add(refName);
 				}
-				if (Names(entry, refName) == false) {
-					entry.Aliases = AddAlias(entry.Aliases, refName);
+				bool chosen = false;
+				if (entry.Provisional == true) {
+					// VNDB's name was a placeholder; the script's own tag is the name.
+					Console.WriteLine(entry.Written + " was provisional, from VNDB; " + editName + " becomes the written name.");
+					entry.Written = editName;
+					entry.Provisional = false;
+					chosen = true;
 				}
-				if (Names(entry, editName) == false) {
-					entry.Aliases = AddAlias(entry.Aliases, editName);
+				foreach (string name in added) {
+					if (chosen == false) {
+						bool make = YesNoMenu.Ask("Make " + name + " the name " + editCheckpoint.Label + " writes for " + entry.Written + "?",
+							"Every speaker tag of this character in " + editCheckpoint.Label + " would be rewritten to it.");
+						if (make == true) {
+							entry.Written = name;
+							chosen = true;
+						}
+					}
 				}
-				string problem = Glossary.SaveCharacter(editFolder, entry);
+				string problem = NametagConform.SaveAndConform(editCheckpoint, entry, replaces, out string report);
 				if (problem.Length > 0) {
 					Console.WriteLine(problem);
 					ConsoleExt.WaitForEnter("continue");
 				}
 				if (problem.Length == 0) {
+					// The two sides share one glossary: the same entry goes to the reference,
+					// without touching its files.
+					string mirrored = Glossary.SaveCharacter(refFolder, entry, replaces);
+					if (mirrored.Length > 0) {
+						Console.WriteLine("Not mirrored to the reference's glossary: " + mirrored);
+					}
 					cast = Glossary.Characters(editFolder);
-					Console.WriteLine("Learned: " + entry.En + " (" + entry.Jp + ")" + AliasText(entry) + ". From here the walk treats them as one speaker.");
+					Console.WriteLine("Learned: " + entry.NamesText + "; the translation writes " + entry.Written + ". " + report + " From here the walk treats them as one speaker.");
 					ConsoleExt.WaitForEnter("continue");
 				}
 			}
 			return learn;
-		}
-
-
-		private static string AddAlias(string aliases, string name) {
-			string joined = name;
-			if (aliases.Trim().Length > 0) {
-				joined = aliases.Trim() + ", " + name;
-			}
-			return joined;
-		}
-
-
-		private static string AliasText(CharacterEntry entry) {
-			string text = "";
-			if (entry.Aliases.Trim().Length > 0) {
-				text = ", aliases " + entry.Aliases.Trim();
-			}
-			return text;
 		}
 
 
@@ -208,15 +235,7 @@ namespace TranslationTools {
 		/// when neither applies.
 		/// </summary>
 		private static NametagConvention? TagsFor(Checkpoint checkpoint) {
-			NametagConvention? convention = null;
-			if (TgdFeatures.Enabled == true) {
-				convention = NametagConvention.Tgd();
-			}
-			if (TgdFeatures.Enabled == false) {
-				CheckpointInfo info = CheckpointInfo.Load(CheckpointInspector.FolderOf(checkpoint.Path));
-				convention = NametagConvention.FromStored(info.SpeakerTag);
-			}
-			return convention;
+			return NametagConvention.For(checkpoint);
 		}
 
 
@@ -266,9 +285,13 @@ namespace TranslationTools {
 				List<AlignmentLine> editLines = AlignmentLines.Read(editPath, editTags);
 				List<AlignmentLine> refLines = AlignmentLines.Read(refPath, refTags);
 				AlignmentPairing pairing = AlignmentPairing.Load(pair.Folder);
+				// One glossary on both sides: a tag resolves the same way wherever it sits, and
+				// a correction writes the shared written name. The caller made them the same.
 				List<CharacterEntry> characters = Glossary.Characters(CheckpointInspector.FolderOf(edit.Path));
 				cast = characters;
 				editFolder = CheckpointInspector.FolderOf(edit.Path);
+				refFolder = CheckpointInspector.FolderOf(reference.Path);
+				editCheckpoint = edit;
 				pendingPairs.Clear();
 				declinedPairs.Clear();
 				VoiceEvidence voice = new(edit, reference, pair.Key, pair.RefKey);
@@ -316,7 +339,7 @@ namespace TranslationTools {
 							Progress(a, b, "same clip, model agrees");
 							voiceRun++;
 							decided = true;
-							NoteSpeakerMismatch(a, b);
+							AfterPairing(a, b);
 						}
 					}
 					int structureRunLength = Math.Max(AlignmentSettings.AutoPairRun, AlignmentSettings.ModelPairRun);
@@ -335,7 +358,7 @@ namespace TranslationTools {
 							Progress(a, b, "speaker order + audio over " + run + " lines");
 							structureRun++;
 							decided = true;
-							NoteSpeakerMismatch(a, b);
+							AfterPairing(a, b);
 						}
 						if (decided == false && audioAgrees == true && AlignmentSettings.ModelPairRun > 0 && run >= AlignmentSettings.ModelPairRun) {
 							SpeakerOrderNote(editLines, e, refLines, r, out string orderEvidence);
@@ -346,7 +369,7 @@ namespace TranslationTools {
 								Progress(a, b, "speaker order + audio over " + run + " lines, model agrees");
 								voiceRun++;
 								decided = true;
-								NoteSpeakerMismatch(a, b);
+								AfterPairing(a, b);
 							}
 						}
 					}
@@ -355,7 +378,7 @@ namespace TranslationTools {
 						Progress(a, b, "same text");
 						autoRun++;
 						decided = true;
-						NoteSpeakerMismatch(a, b);
+						AfterPairing(a, b);
 					}
 					if (decided == false && verdict != VoiceEvidence.Different && tagsKnown == true && AlignmentSettings.SpeakerWindow > 0
 						&& a.Bare.Length > 0 && a.Bare == b.Bare && SameSpeaker(a, b, cast) == true) {
@@ -492,7 +515,7 @@ namespace TranslationTools {
 				}
 				if (action == "same") {
 					pairing.Add(Pair(a.Index, b.Index, "user"));
-					NoteSpeakerMismatch(a, b);
+					AfterPairing(a, b);
 				}
 				if (action == "edit-only") {
 					pairing.Add(Pair(a.Index, -1, PairingEntry.Only));
@@ -503,8 +526,8 @@ namespace TranslationTools {
 				if (action == "swap" && swapThis != null && swapThat != null) {
 					pairing.Add(Pair(a.Index, swapThat.Index, "model"));
 					pairing.Add(Pair(swapThis.Index, b.Index, "model"));
-					NoteSpeakerMismatch(a, swapThat);
-					NoteSpeakerMismatch(swapThis, b);
+					AfterPairing(a, swapThat);
+					AfterPairing(swapThis, b);
 				}
 				if (action == "moved") {
 					OutOfOrder(pairing, editLines, e, refLines, r, editLabel, refLabel, hint);
@@ -603,8 +626,8 @@ namespace TranslationTools {
 
 
 		/// <summary>
-		/// The TGD anchor: both narration, or both named with the same character through
-		/// the glossary (one side's Jp name against the other's En name, or aliases).
+		/// The speaker anchor: both narration, or both named with the same character through
+		/// the glossary, where any of a character's names counts as that character.
 		/// </summary>
 		private static bool SameSpeaker(AlignmentLine a, AlignmentLine b, List<CharacterEntry> characters) {
 			bool same = false;
@@ -614,23 +637,12 @@ namespace TranslationTools {
 			if (a.HasNametag == true && b.HasNametag == true) {
 				same = string.Equals(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
 				foreach (CharacterEntry entry in characters) {
-					if (same == false && Names(entry, a.Name) == true && Names(entry, b.Name) == true) {
+					if (same == false && entry.Has(a.Name) == true && entry.Has(b.Name) == true) {
 						same = true;
 					}
 				}
 			}
 			return same;
-		}
-
-
-		private static bool Names(CharacterEntry entry, string name) {
-			bool hit = string.Equals(entry.Jp, name, StringComparison.OrdinalIgnoreCase) || string.Equals(entry.En, name, StringComparison.OrdinalIgnoreCase);
-			foreach (string alias in entry.Aliases.Split(',')) {
-				if (hit == false && alias.Trim().Length > 0 && string.Equals(alias.Trim(), name, StringComparison.OrdinalIgnoreCase)) {
-					hit = true;
-				}
-			}
-			return hit;
 		}
 
 

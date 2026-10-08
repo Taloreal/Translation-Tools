@@ -49,6 +49,22 @@ namespace TranslationTools {
 
 
 		/// <summary>
+		/// Every dialogue key of a checkpoint's split, in no particular order; empty when
+		/// it has no split.
+		/// </summary>
+		public static List<string> DialogueKeys(Checkpoint checkpoint) {
+			List<string> keys = new();
+			string dialogues = Path.Combine(CheckpointInspector.FolderOf(checkpoint.Path), CheckpointInspector.SplitFolder, NScripterSplit.DialoguesFolder);
+			if (Directory.Exists(dialogues) == true) {
+				foreach (string file in Directory.GetFiles(dialogues, "*.txt")) {
+					keys.Add(Path.GetFileNameWithoutExtension(file));
+				}
+			}
+			return keys;
+		}
+
+
+		/// <summary>
 		/// Every pointer line of a dialogue file, in file order. Header and blank lines are skipped.
 		/// </summary>
 		public static List<AlignmentLine> Read(string dialoguePath) {

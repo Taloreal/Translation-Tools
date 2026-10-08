@@ -481,20 +481,20 @@ namespace TranslationTools {
 
 
 		/// <summary>
-		/// The third repair, after quoting: a quoted Japanese name that the glossary knows -
-		/// "竜臥" as a nametag reads 【"竜臥"】 - becomes the quoted English name, so the split
-		/// carries the names the translation uses. Only a whole quoted literal equal to the
-		/// name is replaced; a name inside a longer line of narration is left to the translator.
+		/// The third repair, after quoting: a quoted name that the glossary knows by any of a
+		/// character's other names - "竜臥" as a nametag reads 【"竜臥"】 - becomes the quoted
+		/// written name, so the split carries the names the translation uses. Only a whole
+		/// quoted literal equal to the name is replaced; a name inside a longer line of
+		/// narration is left to the translator.
 		/// </summary>
 		/// <returns>How many replacements were made.</returns>
 		private static int RenameSpeakers(List<ScriptLine> lines, List<CharacterEntry> characters) {
 			int renamed = 0;
 			foreach (ScriptLine line in lines) {
 				foreach (CharacterEntry character in characters) {
-					bool usable = character.Jp.Length > 0 && character.En.Length > 0 && character.Jp != character.En;
-					if (usable == true) {
-						string wanted = "\"" + character.Jp + "\"";
-						string replacement = "\"" + character.En + "\"";
+					foreach (string other in character.Others()) {
+						string wanted = "\"" + other + "\"";
+						string replacement = "\"" + character.Written + "\"";
 						int at = line.Content.IndexOf(wanted, StringComparison.Ordinal);
 						while (at >= 0) {
 							line.Content = line.Content.Substring(0, at) + replacement + line.Content.Substring(at + wanted.Length);

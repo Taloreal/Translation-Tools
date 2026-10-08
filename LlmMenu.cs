@@ -15,7 +15,14 @@ namespace TranslationTools {
 
 		private static readonly ConsoleMenuItem AddressItem = new("");
 		private static readonly ConsoleMenuItem ModelItem = new("");
+		private static readonly ConsoleMenuItem FromItem = new("");
+		private static readonly ConsoleMenuItem ToItem = new("");
 		private static readonly ConsoleMenuItem KeyItem = new("");
+
+		/// <summary>Languages offered by name before "Type a language..."; the stored value is the plain word.</summary>
+		private static readonly string[] CommonLanguages = new string[] {
+			"Japanese", "English", "Chinese", "Korean", "German", "French", "Spanish", "Italian", "Portuguese", "Russian", "Polish"
+		};
 		private static readonly ConsoleMenuItem TemperatureItem = new("");
 		private static readonly ConsoleMenuItem TokensItem = new("");
 		private static readonly ConsoleMenuItem TimeoutItem = new("");
@@ -33,6 +40,8 @@ namespace TranslationTools {
 			menu.AddOnDrawMenuAction(Refresh);
 			menu.AddChoice(AddressItem.SetActionOnSelect(SetAddress));
 			menu.AddChoice(ModelItem.SetActionOnSelect(SetModel));
+			menu.AddChoice(FromItem.SetActionOnSelect(SetFromLanguage));
+			menu.AddChoice(ToItem.SetActionOnSelect(SetToLanguage));
 			menu.AddChoice(KeyItem.SetActionOnSelect(SetApiKey));
 			menu.AddChoice(TemperatureItem.SetActionOnSelect(SetTemperature));
 			menu.AddChoice(TokensItem.SetActionOnSelect(SetMaxTokens));
@@ -62,6 +71,8 @@ namespace TranslationTools {
 			}
 			AddressItem.SetText("Address: " + LlmClient.Address);
 			ModelItem.SetText("Model: " + model);
+			FromItem.SetText("Translate from: " + LanguageText(LlmClient.FromLanguage));
+			ToItem.SetText("Translate to: " + LanguageText(LlmClient.ToLanguage));
 			KeyItem.SetText("API key: " + LlmClient.ApiKeyForDisplay);
 			TemperatureItem.SetText("Temperature: " + LlmClient.Temperature.ToString(CultureInfo.InvariantCulture));
 			TokensItem.SetText("Most tokens in a reply: " + LlmClient.MaxTokens);
@@ -129,6 +140,69 @@ namespace TranslationTools {
 			if (choice == 2) {
 				LlmClient.Model = "";
 				Console.WriteLine("No model name will be sent.");
+				ConsoleExt.WaitForEnter("continue");
+			}
+		}
+
+
+		private static string LanguageText(string language) {
+			string text = language;
+			if (text.Length == 0) {
+				text = "(not set)";
+			}
+			return text;
+		}
+
+
+		private static void SetFromLanguage() {
+			SetLanguage("Translate from", LlmClient.FromLanguage, (language) => { LlmClient.FromLanguage = language; });
+		}
+
+
+		private static void SetToLanguage() {
+			SetLanguage("Translate to", LlmClient.ToLanguage, (language) => { LlmClient.ToLanguage = language; });
+		}
+
+
+		/// <summary>
+		/// One language setting: a menu of common languages, one typed in, not set, or cancel.
+		/// The stored value is the plain word a prompt will carry. Belongs to the model, not to
+		/// any checkpoint, so it holds across every checkpoint and pair.
+		/// </summary>
+		/// <param name="label">The row's name, for the screen.</param>
+		/// <param name="current">The value now.</param>
+		/// <param name="store">Writes the chosen value.</param>
+		private static void SetLanguage(string label, string current, Action<string> store) {
+			ConsoleSelectMenu menu = new(loops: false, numbered: false, clearOnRefresh: true);
+			menu.SetPreChoiceText(label + ", now: " + LanguageText(current));
+			foreach (string language in CommonLanguages) {
+				menu.AddChoice(new ConsoleMenuItem(language));
+			}
+			int typeIndex = CommonLanguages.Length;
+			menu.AddChoice(new ConsoleMenuItem("Type a language..."));
+			menu.AddChoice(new ConsoleMenuItem("Not set"));
+			menu.AddChoice(new ConsoleMenuItem("Cancel"));
+			int choice = menu.GetChoice();
+			string chosen = current;
+			bool changed = false;
+			if (choice >= 0 && choice < typeIndex) {
+				chosen = CommonLanguages[choice];
+				changed = true;
+			}
+			if (choice == typeIndex) {
+				string typed = ConsoleExt.ReadLine("Language, as a prompt should name it (blank to cancel): ", -1, false).Trim();
+				if (typed.Length > 0) {
+					chosen = typed;
+					changed = true;
+				}
+			}
+			if (choice == typeIndex + 1) {
+				chosen = "";
+				changed = true;
+			}
+			if (changed == true) {
+				store(chosen);
+				Console.WriteLine(label + ": " + LanguageText(chosen));
 				ConsoleExt.WaitForEnter("continue");
 			}
 		}

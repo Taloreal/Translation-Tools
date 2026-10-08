@@ -31,6 +31,7 @@ namespace TranslationTools {
 				menu.AddOnDrawMenuAction(RefreshHeader);
 				menu.AddChoice(new ConsoleMenuItem("Characters...").SetActionOnSelect(CharactersMenu.Show));
 				menu.AddChoice(new ConsoleMenuItem("Translation rules...").SetActionOnSelect(RulesMenu.Show));
+				menu.AddChoice(new ConsoleMenuItem("Learning: the speaker tag, then the names, from this checkpoint's own files...").SetActionOnSelect(LearningMenu.Show));
 				menu.AddChoice(new ConsoleMenuItem("Copy this glossary to another checkpoint (replaces that one's)").SetActionOnSelect(CopyToAnother));
 				menu.AddChoice(new ConsoleMenuItem("Take the glossary from a checkpoint of the same game (replaces this one's)").SetActionOnSelect(TakeFromSameGame));
 				// "Import from the old tool's review.json" is delisted: it did its job. ImportOld
@@ -53,7 +54,7 @@ namespace TranslationTools {
 			if (sources.Count > 0) {
 				Checkpoint? source = sources[0];
 				if (sources.Count > 1) {
-					source = PickCheckpoint(sources, "Several checkpoints of this game have a glossary. Copy which one here?");
+					source = PickCheckpoint(sources, "Several checkpoints of this game have a glossary. Copy which one here?", "Do not copy");
 				}
 				if (source != null) {
 					bool yes = YesNoMenu.Ask("\"" + source.Label + "\" is the same game and has a glossary. Copy it to \"" + checkpoint.Label + "\"?");
@@ -138,13 +139,13 @@ namespace TranslationTools {
 		/// <summary>
 		/// A paged pick over checkpoints, or null for Back.
 		/// </summary>
-		private static Checkpoint? PickCheckpoint(List<Checkpoint> choices, string question) {
+		private static Checkpoint? PickCheckpoint(List<Checkpoint> choices, string question, string backLabel = "Back") {
 			Checkpoint? picked = null;
 			List<string> rows = new();
 			foreach (Checkpoint choice in choices) {
 				rows.Add(choice.Label + "   " + choice.Path);
 			}
-			int index = PagedPicker.Pick(rows, question);
+			int index = PagedPicker.Pick(rows, question, backLabel);
 			if (index >= 0) {
 				picked = choices[index];
 			}
@@ -266,36 +267,266 @@ namespace TranslationTools {
 
 	/// <summary>
 	/// The characters of the selected checkpoint's glossary. The list is paged; picking a
-	/// row shows that character in full.
+	/// row shows that character in full. A character is a list of names and the one the
+	/// translation writes; any save that changes names conforms the checkpoint's dialogue
+	/// files through NametagConform, and the outcome is reported with the save.
 	/// </summary>
 	public static class CharactersMenu {
 
+		/// <summary>What reading the glossary repaired while this menu was open, shown in its header.</summary>
+		private static string repairs = "";
+
+
 		public static void Show() {
+			repairs = "";
 			ConsoleSelectMenu menu = new(loops: true, numbered: false, clearOnRefresh: true);
 			menu.AddOnDrawMenuAction(RefreshHeader);
 			menu.AddChoice(new ConsoleMenuItem("List characters").SetActionOnSelect(List));
 			menu.AddChoice(new ConsoleMenuItem("Add a character").SetActionOnSelect(Add));
 			menu.AddChoice(new ConsoleMenuItem("Change a character").SetActionOnSelect(Change));
 			menu.AddChoice(new ConsoleMenuItem("Remove a character").SetActionOnSelect(Remove));
+			menu.AddChoice(new ConsoleMenuItem("Remove every character (asks first; there is no undo)").SetActionOnSelect(RemoveAll));
+			string language = LlmClient.ToLanguage;
+			if (language.Length == 0) {
+				language = "target-language";
+			}
+			menu.AddChoice(new ConsoleMenuItem("Let the model pick each written name the " + language + " way, from the names it has...").SetActionOnSelect(CharacterLanguageMenu.PickWrittenNames));
+			menu.AddChoice(new ConsoleMenuItem("Suggest a " + language + " name for each character, one at a time, yours to accept...").SetActionOnSelect(CharacterLanguageMenu.SuggestNames));
 			menu.AddChoice(new ConsoleMenuItem("Back"));
 			menu.GetChoice();
 		}
 
 
 		private static void RefreshHeader(ConsoleSelectMenu menu) {
-			menu.SetPreChoiceText("-- Characters (" + Glossary.Characters(GlossariesMenu.SelectedFolder()).Count + ") --\n");
+			string folder = GlossariesMenu.SelectedFolder();
+			int count = Glossary.Characters(folder).Count;
+			string note = Glossary.TakeRepairNote(folder);
+			if (note.Length > 0) {
+				repairs += "Repaired on reading: " + note + ".\n";
+			}
+			menu.SetPreChoiceText("-- Characters (" + count + ") --\n" + repairs);
 		}
 
 
 		/// <summary>
-		/// One row per character for the picker: the English name, then the script's.
+		/// One row per character for the picker: the written name, then how many other
+		/// names it has. The names themselves are in the full view, so the written one is
+		/// never lost among them.
 		/// </summary>
 		private static List<string> Rows(List<CharacterEntry> entries) {
 			List<string> rows = new();
+			Dictionary<string, int> lines = LineCounts(entries);
 			foreach (CharacterEntry entry in entries) {
-				rows.Add(entry.En + "   " + entry.Jp);
+				int others = entry.Others().Count;
+				string count = "no other name";
+				if (others == 1) {
+					count = "1 other name";
+				}
+				if (others > 1) {
+					count = others + " other names";
+				}
+				string spoken = "";
+				if (lines.ContainsKey(entry.Written) == true) {
+					spoken = "   " + lines[entry.Written] + " line(s)";
+				}
+				rows.Add(entry.Written + ProvisionalMark(entry) + "   (" + count + ")" + spoken);
 			}
 			return rows;
+		}
+
+
+		/// <summary>
+		/// How many dialogue lines each character speaks in the selected checkpoint, by
+		/// written name, counting every tag that is one of the character's names. Empty when
+		/// the checkpoint has no speaker tag learned, since the lines cannot be told apart.
+		/// </summary>
+		private static Dictionary<string, int> LineCounts(List<CharacterEntry> entries) {
+			Dictionary<string, int> counts = new(StringComparer.OrdinalIgnoreCase);
+			Checkpoint? checkpoint = CheckpointList.Selected();
+			NametagConvention? convention = null;
+			if (checkpoint != null) {
+				convention = NametagConvention.For(checkpoint);
+			}
+			if (checkpoint != null && convention != null) {
+				foreach (CharacterEntry entry in entries) {
+					counts[entry.Written] = 0;
+				}
+				LearningMenu.Scan(checkpoint, convention, entries, out List<SpokenName> matched);
+				foreach (SpokenName spoken in matched) {
+					CharacterEntry? owner = Glossary.Find(entries, spoken.Name);
+					if (owner != null) {
+						counts[owner.Written] += spoken.Lines;
+					}
+				}
+			}
+			return counts;
+		}
+
+
+		/// <summary>
+		/// " (provisional, from VNDB)" when no script has named this character yet, else empty.
+		/// </summary>
+		private static string ProvisionalMark(CharacterEntry entry) {
+			string mark = "";
+			if (entry.Provisional == true) {
+				mark = " (provisional, from VNDB)";
+			}
+			return mark;
+		}
+
+
+		/// <summary>
+		/// Which of a character's names the translation writes. One name needs no question;
+		/// otherwise a paged pick, where Back keeps the current one.
+		/// </summary>
+		private static string PickWritten(CharacterEntry entry, string current) {
+			string written = current;
+			if (entry.Names.Count == 1) {
+				written = entry.Names[0];
+			}
+			if (entry.Names.Count > 1) {
+				int index = PagedPicker.Pick(entry.Names, "Which name does the translation write? Every speaker tag of this character is rewritten to it.");
+				if (index >= 0) {
+					written = entry.Names[index];
+				}
+			}
+			return written;
+		}
+
+
+		/// <summary>
+		/// One character's names: add one, respell one, remove one. Every action saves and
+		/// conforms the files on the spot and reports what changed, so the menu above has
+		/// nothing left to save when this returns.
+		/// </summary>
+		private static void NamesMenu(Checkpoint checkpoint, CharacterEntry entry) {
+			ConsoleSelectMenu menu = new(loops: true, numbered: false, clearOnRefresh: true);
+			menu.AddOnDrawMenuAction((shown) => {
+				shown.SetPreChoiceText("-- Names of " + entry.Written + " --\n"
+					+ "The translation writes: " + entry.Written + "\n"
+					+ "Other names: " + string.Join(", ", entry.Others()) + "\n");
+			});
+			menu.AddChoice(new ConsoleMenuItem("Add a name (it can become the written one)...").SetActionOnSelect(() => { AddName(checkpoint, entry); }));
+			menu.AddChoice(new ConsoleMenuItem("Respell a name (its speaker tags follow)...").SetActionOnSelect(() => { RespellName(checkpoint, entry); }));
+			menu.AddChoice(new ConsoleMenuItem("Remove a name (not the written one)...").SetActionOnSelect(() => { RemoveName(checkpoint, entry); }));
+			menu.AddChoice(new ConsoleMenuItem("Split a name off as its own character (not the written one)...").SetActionOnSelect(() => { SplitName(checkpoint, entry); }));
+			menu.AddChoice(new ConsoleMenuItem("Back"));
+			menu.GetChoice();
+		}
+
+
+		/// <summary>
+		/// Takes one of the other names away from this character and makes it a character
+		/// of its own, written as that name, for when a merge put two people under one
+		/// entry. The glossary is corrected only: tags already rewritten by the earlier
+		/// merge stay as they are, and the report says so.
+		/// </summary>
+		private static void SplitName(Checkpoint checkpoint, CharacterEntry entry) {
+			List<string> others = entry.Others();
+			if (others.Count == 0) {
+				Finish("", entry.Written + " has no other name to split off.");
+			}
+			if (others.Count > 0) {
+				int index = PagedPicker.Pick(others, "Split which name of " + entry.Written + " off as its own character?");
+				if (index >= 0) {
+					string name = others[index];
+					entry.Names.Remove(name);
+					string problem = NametagConform.SaveAndConform(checkpoint, entry, entry.Written, out string report);
+					if (problem.Length > 0) {
+						entry.Names.Add(name);
+					}
+					if (problem.Length == 0) {
+						CharacterEntry made = new();
+						made.Written = name;
+						made.Add(name);
+						problem = NametagConform.SaveAndConform(checkpoint, made, "", out string madeReport);
+						if (problem.Length > 0) {
+							entry.Names.Add(name);
+							Glossary.SaveCharacter(CheckpointInspector.FolderOf(checkpoint.Path), entry, entry.Written);
+						}
+						if (problem.Length == 0) {
+							CheckpointLog.Warning(CheckpointInspector.FolderOf(checkpoint.Path), "Glossary", name + " split off from " + entry.Written + " as its own character");
+						}
+					}
+					Finish(problem, name + " is now its own character. Speaker tags the earlier merge rewrote to " + entry.Written + " stay as they are; a fresh split of the archive restores them.");
+				}
+			}
+		}
+
+
+		private static void AddName(Checkpoint checkpoint, CharacterEntry entry) {
+			string name = ConsoleExt.ReadLine("Name to add (blank to cancel): ", -1, false).Trim();
+			if (name.Length > 0 && entry.Has(name) == true) {
+				Finish("", entry.Written + " already has the name " + name + ".");
+			}
+			if (name.Length > 0 && entry.Has(name) == false) {
+				string replaces = entry.Written;
+				entry.Add(name);
+				bool make = YesNoMenu.Ask("Make " + name + " the name the translation writes for " + entry.Written + "?",
+					"Every speaker tag of this character in the checkpoint would be rewritten to it.");
+				bool wasProvisional = entry.Provisional;
+				if (make == true) {
+					entry.Written = name;
+					entry.Provisional = false;
+				}
+				string problem = NametagConform.SaveAndConform(checkpoint, entry, replaces, out string report);
+				if (problem.Length > 0) {
+					entry.Names.Remove(name);
+					entry.Written = replaces;
+					entry.Provisional = wasProvisional;
+				}
+				Finish(problem, "Added " + name + ". " + report);
+			}
+		}
+
+
+		/// <summary>
+		/// Changes one name's spelling. Tags carrying the old spelling are rewritten to the
+		/// written name like any other name of the character's, so a respelled written
+		/// name carries its tags with it.
+		/// </summary>
+		private static void RespellName(Checkpoint checkpoint, CharacterEntry entry) {
+			int index = PagedPicker.Pick(entry.Ordered(), "Respell which name of " + entry.Written + "?");
+			if (index >= 0) {
+				string old = entry.Ordered()[index];
+				string typed = ConsoleExt.ReadLine("New spelling of " + old + " (blank to cancel): ", -1, false).Trim();
+				if (typed.Length > 0 && string.Equals(typed, old, StringComparison.Ordinal) == false) {
+					string replaces = entry.Written;
+					List<string> names = new(entry.Names);
+					entry.Names[entry.Names.IndexOf(old)] = typed;
+					if (string.Equals(old, entry.Written, StringComparison.Ordinal) == true) {
+						entry.Written = typed;
+					}
+					List<string> retired = new();
+					retired.Add(old);
+					string problem = NametagConform.SaveAndConform(checkpoint, entry, replaces, out string report, retired);
+					if (problem.Length > 0) {
+						entry.Names = names;
+						entry.Written = replaces;
+					}
+					Finish(problem, old + " is now spelled " + typed + ". " + report);
+				}
+			}
+		}
+
+
+		private static void RemoveName(Checkpoint checkpoint, CharacterEntry entry) {
+			List<string> others = entry.Others();
+			if (others.Count == 0) {
+				Finish("", entry.Written + " has no other name to remove. The written name stays; respell it or pick another written name instead.");
+			}
+			if (others.Count > 0) {
+				int index = PagedPicker.Pick(others, "Remove which name of " + entry.Written + "? (the written name cannot be removed)");
+				if (index >= 0) {
+					string gone = others[index];
+					entry.Names.Remove(gone);
+					string problem = NametagConform.SaveAndConform(checkpoint, entry, entry.Written, out string report);
+					if (problem.Length > 0) {
+						entry.Names.Add(gone);
+					}
+					Finish(problem, "Removed the name " + gone + ". " + report);
+				}
+			}
 		}
 
 
@@ -329,29 +560,31 @@ namespace TranslationTools {
 
 
 		private static void Add() {
-			CharacterEntry entry = new();
-			entry.En = ConsoleExt.ReadLine("English name (blank to cancel): ", -1, false).Trim();
-			if (entry.En.Length > 0) {
-				entry.Jp = ConsoleExt.ReadLine("Name as the script writes it: ", -1, false).Trim();
-				entry.Aliases = ConsoleExt.ReadLine("Aliases, comma-separated (blank for none): ", -1, false).Trim();
-				entry.Role = ConsoleExt.ReadLine("Role, one line (blank for none): ", -1, false).Trim();
-				entry.Notes = ConsoleExt.ReadLine("Notes, one line (blank for none): ", -1, false).Trim();
-				entry.Profile = ReadProfile("");
-				Finish(Glossary.SaveCharacter(GlossariesMenu.SelectedFolder(), entry), "Added " + entry.En + ".");
+			Checkpoint? checkpoint = CheckpointList.Selected();
+			if (checkpoint != null) {
+				CharacterEntry entry = new();
+				entry.Names = CharacterEntry.SplitNames(ConsoleExt.ReadLine("Names, comma-separated, each as some script writes it (blank to cancel): ", -1, false));
+				if (entry.Names.Count > 0) {
+					entry.Written = PickWritten(entry, entry.Names[0]);
+					entry.Role = ConsoleExt.ReadLine("Role, one line (blank for none): ", -1, false).Trim();
+					entry.Notes = ConsoleExt.ReadLine("Notes, one line (blank for none): ", -1, false).Trim();
+					entry.Profile = ReadProfile("");
+					string problem = NametagConform.SaveAndConform(checkpoint, entry, "", out string report);
+					Finish(problem, "Added " + entry.Written + ". " + report);
+				}
 			}
 		}
 
 
 		private static void Change() {
+			Checkpoint? checkpoint = CheckpointList.Selected();
 			CharacterEntry? entry = Pick("Change which character?");
-			if (entry != null) {
-				string folder = GlossariesMenu.SelectedFolder();
-				string oldEn = entry.En;
+			if (entry != null && checkpoint != null) {
+				string replaces = entry.Written;
 				ConsoleSelectMenu menu = new(loops: false, numbered: false, clearOnRefresh: true);
-				menu.SetPreChoiceText(Describe(entry) + "\nChange which field?");
-				menu.AddChoice(new ConsoleMenuItem("English name"));
-				menu.AddChoice(new ConsoleMenuItem("Name as the script writes it"));
-				menu.AddChoice(new ConsoleMenuItem("Aliases"));
+				menu.SetPreChoiceText(Describe(entry) + "\nChange what?");
+				menu.AddChoice(new ConsoleMenuItem("Names: add, respell or remove one..."));
+				menu.AddChoice(new ConsoleMenuItem("Which name the translation writes (rewrites this character's speaker tags)"));
 				menu.AddChoice(new ConsoleMenuItem("Role"));
 				menu.AddChoice(new ConsoleMenuItem("Notes"));
 				menu.AddChoice(new ConsoleMenuItem("Profile"));
@@ -359,32 +592,29 @@ namespace TranslationTools {
 				int field = menu.GetChoice();
 				bool changed = true;
 				if (field == 0) {
-					entry.En = Ask("English name", entry.En);
+					NamesMenu(checkpoint, entry);
+					changed = false;
 				}
 				if (field == 1) {
-					entry.Jp = Ask("Name as the script writes it", entry.Jp);
+					entry.Written = PickWritten(entry, entry.Written);
+					// Picked on purpose: no longer VNDB's placeholder, whichever name it is.
+					entry.Provisional = false;
 				}
 				if (field == 2) {
-					entry.Aliases = Ask("Aliases", entry.Aliases);
-				}
-				if (field == 3) {
 					entry.Role = Ask("Role", entry.Role);
 				}
-				if (field == 4) {
+				if (field == 3) {
 					entry.Notes = Ask("Notes", entry.Notes);
 				}
-				if (field == 5) {
+				if (field == 4) {
 					entry.Profile = ReadProfile(entry.Profile);
 				}
-				if (field < 0 || field > 5) {
+				if (field < 0 || field > 4) {
 					changed = false;
 				}
 				if (changed == true) {
-					string problem = Glossary.SaveCharacter(folder, entry);
-					if (problem.Length == 0 && string.Equals(oldEn, entry.En, StringComparison.Ordinal) == false) {
-						Glossary.RemoveCharacter(folder, oldEn);
-					}
-					Finish(problem, "Changed " + entry.En + ".");
+					string problem = NametagConform.SaveAndConform(checkpoint, entry, replaces, out string report);
+					Finish(problem, "Changed " + entry.Written + ". " + report);
 				}
 			}
 		}
@@ -393,10 +623,31 @@ namespace TranslationTools {
 		private static void Remove() {
 			CharacterEntry? entry = Pick("Remove which character? Its file is deleted.");
 			if (entry != null) {
-				bool yes = YesNoMenu.Ask("Remove " + entry.En + "?");
+				bool yes = YesNoMenu.Ask("Remove " + entry.Written + "?");
 				if (yes == true) {
-					Glossary.RemoveCharacter(GlossariesMenu.SelectedFolder(), entry.En);
-					Finish("", "Removed " + entry.En + ".");
+					Glossary.RemoveCharacter(GlossariesMenu.SelectedFolder(), entry.Written);
+					Finish("", "Removed " + entry.Written + ".");
+				}
+			}
+		}
+
+
+		/// <summary>
+		/// Deletes every character after one question that carries the count. Deliberate
+		/// against the usual picking-is-the-decision rule: fifty entries have no undo.
+		/// </summary>
+		private static void RemoveAll() {
+			string folder = GlossariesMenu.SelectedFolder();
+			int count = Glossary.Characters(folder).Count;
+			if (count == 0) {
+				Finish("", "There are no characters to remove.");
+			}
+			if (count > 0) {
+				bool yes = YesNoMenu.Ask("Delete all " + count + " character(s) of this glossary? There is no undo.");
+				if (yes == true) {
+					int removed = Glossary.RemoveAllCharacters(folder);
+					CheckpointLog.Warning(folder, "Glossary", "removed every character (" + removed + ")");
+					Finish("", "Removed " + removed + " character(s).");
 				}
 			}
 		}
@@ -444,7 +695,7 @@ namespace TranslationTools {
 
 
 		private static string Describe(CharacterEntry entry) {
-			return entry.En + "  (" + entry.Jp + ")\n  aliases: " + entry.Aliases + "\n  role: " + entry.Role + "\n  notes: " + entry.Notes + "\n  profile: " + entry.Profile.Replace("\r", "").Replace("\n", "\n           ");
+			return entry.Written + ProvisionalMark(entry) + "\n  names: " + entry.NamesText + "\n  role: " + entry.Role + "\n  notes: " + entry.Notes + "\n  profile: " + entry.Profile.Replace("\r", "").Replace("\n", "\n           ");
 		}
 
 
@@ -475,8 +726,31 @@ namespace TranslationTools {
 			menu.AddChoice(new ConsoleMenuItem("Move a rule up").SetActionOnSelect(MoveUp));
 			menu.AddChoice(new ConsoleMenuItem("Move a rule down").SetActionOnSelect(MoveDown));
 			menu.AddChoice(new ConsoleMenuItem("Remove a rule").SetActionOnSelect(Remove));
+			menu.AddChoice(new ConsoleMenuItem("Remove every rule (asks first; there is no undo)").SetActionOnSelect(RemoveAll));
 			menu.AddChoice(new ConsoleMenuItem("Back"));
 			menu.GetChoice();
+		}
+
+
+		/// <summary>
+		/// Empties the rules after one question that carries the count.
+		/// </summary>
+		private static void RemoveAll() {
+			string folder = GlossariesMenu.SelectedFolder();
+			int count = Glossary.Rules(folder).Count;
+			if (count == 0) {
+				Finish("", "There are no rules to remove.");
+			}
+			if (count > 0) {
+				bool yes = YesNoMenu.Ask("Delete all " + count + " rule(s) of this glossary? There is no undo.");
+				if (yes == true) {
+					string problem = Glossary.SaveRules(folder, new List<string>());
+					if (problem.Length == 0) {
+						CheckpointLog.Warning(folder, "Glossary", "removed every rule (" + count + ")");
+					}
+					Finish(problem, "Removed " + count + " rule(s).");
+				}
+			}
 		}
 
 

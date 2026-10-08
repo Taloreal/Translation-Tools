@@ -24,7 +24,6 @@ namespace TranslationTools {
 			menu.AddChoice(new ConsoleMenuItem("Start a new pair...").SetActionOnSelect(StartPair));
 			menu.AddChoice(new ConsoleMenuItem("Open a pair...").SetActionOnSelect(OpenPair));
 			menu.AddChoice(new ConsoleMenuItem("Delete a pair: its folder, pairings and backups go...").SetActionOnSelect(DeletePair));
-			menu.AddChoice(new ConsoleMenuItem("Speaker tags: teach a checkpoint from one of its files (optional, sharpens the walk)...").SetActionOnSelect(SpeakerTagsMenu));
 			menu.AddChoice(new ConsoleMenuItem("Settings: speaker-order window, pairing without asking...").SetActionOnSelect(SettingsMenu));
 			menu.AddChoice(new ConsoleMenuItem("Back"));
 			menu.GetChoice();
@@ -59,6 +58,9 @@ namespace TranslationTools {
 			}
 			if (problem.Length == 0) {
 				problem = MustBeSplit(second!);
+			}
+			if (problem.Length == 0 && SyncGlossaries(first!, second!) == false) {
+				problem = "Cancelled: the two glossaries differ and neither was copied. No pair made.";
 			}
 			Checkpoint? canonical = null;
 			Checkpoint? other = null;
@@ -185,179 +187,6 @@ namespace TranslationTools {
 
 
 		/// <summary>
-		/// Optional: teaches a checkpoint how its dialogue files mark the speaker, from one
-		/// file the user points at. The rule is learned from repetition, shown, checked once
-		/// with the model, and stored in checkpoint.info only on a yes. The walk then knows
-		/// that side's speakers. Nothing happens to a checkpoint never taught.
-		/// </summary>
-		private static void SpeakerTagsMenu() {
-			List<Checkpoint> all = CheckpointList.All();
-			Checkpoint? checkpoint = PickCheckpoint(all, null, "Teach which checkpoint its speaker tag?");
-			if (checkpoint != null) {
-				string folder = CheckpointInspector.FolderOf(checkpoint.Path);
-				ConsoleSelectMenu menu = new(loops: true, numbered: false, clearOnRefresh: true);
-				menu.AddOnDrawMenuAction((shown) => {
-					CheckpointInfo info = CheckpointInfo.Load(folder);
-					string current = "none; the walk treats every line of this checkpoint as untagged";
-					NametagConvention? stored = NametagConvention.FromStored(info.SpeakerTag);
-					if (stored != null) {
-						current = stored.Opener + "Name" + stored.Closer;
-					}
-					shown.SetPreChoiceText("-- Speaker tag of " + checkpoint.Label + " --\nNow: " + current + "\n");
-				});
-				menu.AddChoice(new ConsoleMenuItem("Learn it from one of this checkpoint's dialogue files...").SetActionOnSelect(() => { TeachFromFile(checkpoint, folder); }));
-				menu.AddChoice(new ConsoleMenuItem("Copy its speaker tag to another checkpoint of the same game...").SetActionOnSelect(() => { CopyTagTo(checkpoint, folder); }));
-				menu.AddChoice(new ConsoleMenuItem("Take the speaker tag from another checkpoint of the same game...").SetActionOnSelect(() => { TakeTagFrom(checkpoint, folder); }));
-				menu.AddChoice(new ConsoleMenuItem("Forget the speaker tag: lines count as untagged again").SetActionOnSelect(() => { ForgetTag(folder); }));
-				menu.AddChoice(new ConsoleMenuItem("Back"));
-				menu.GetChoice();
-			}
-		}
-
-
-		/// <summary>
-		/// Writes this checkpoint's speaker tag into another checkpoint of the same game.
-		/// </summary>
-		private static void CopyTagTo(Checkpoint source, string sourceFolder) {
-			CheckpointInfo info = CheckpointInfo.Load(sourceFolder);
-			if (info.SpeakerTag.Length == 0) {
-				Console.WriteLine("\"" + source.Label + "\" has no speaker tag to copy. Learn one first.");
-				ConsoleExt.WaitForEnter("continue");
-			}
-			if (info.SpeakerTag.Length > 0) {
-				List<Checkpoint> targets = SameGame(source, info.GameName, false);
-				Checkpoint? target = PickCheckpoint(targets, null, "Copy " + info.SpeakerTag[0] + "Name" + info.SpeakerTag[1] + " to which checkpoint of " + info.GameName + "?");
-				if (target != null) {
-					string targetFolder = CheckpointInspector.FolderOf(target.Path);
-					CheckpointInfo targetInfo = CheckpointInfo.Load(targetFolder);
-					targetInfo.SpeakerTag = info.SpeakerTag;
-					string problem = targetInfo.Save(targetFolder);
-					if (problem.Length > 0) {
-						Console.WriteLine(problem);
-					}
-					if (problem.Length == 0) {
-						Console.WriteLine("\"" + target.Label + "\" now reads " + info.SpeakerTag[0] + "Name" + info.SpeakerTag[1] + " as its speaker tag.");
-					}
-					ConsoleExt.WaitForEnter("continue");
-				}
-			}
-		}
-
-
-		/// <summary>
-		/// Takes the speaker tag of another checkpoint of the same game that has one.
-		/// </summary>
-		private static void TakeTagFrom(Checkpoint target, string targetFolder) {
-			CheckpointInfo info = CheckpointInfo.Load(targetFolder);
-			List<Checkpoint> sources = SameGame(target, info.GameName, true);
-			if (sources.Count == 0) {
-				Console.WriteLine("No other checkpoint of " + info.GameName + " has a speaker tag.");
-				ConsoleExt.WaitForEnter("continue");
-			}
-			if (sources.Count > 0) {
-				Checkpoint? source = PickCheckpoint(sources, null, "Take the speaker tag from which checkpoint of " + info.GameName + "?");
-				if (source != null) {
-					CheckpointInfo sourceInfo = CheckpointInfo.Load(CheckpointInspector.FolderOf(source.Path));
-					info.SpeakerTag = sourceInfo.SpeakerTag;
-					string problem = info.Save(targetFolder);
-					if (problem.Length > 0) {
-						Console.WriteLine(problem);
-					}
-					if (problem.Length == 0) {
-						Console.WriteLine("\"" + target.Label + "\" now reads " + info.SpeakerTag[0] + "Name" + info.SpeakerTag[1] + " as its speaker tag.");
-					}
-					ConsoleExt.WaitForEnter("continue");
-				}
-			}
-		}
-
-
-		/// <summary>
-		/// The other checkpoints whose info names the same game, optionally only those that
-		/// have a speaker tag. A checkpoint with no game name matches nothing.
-		/// </summary>
-		private static List<Checkpoint> SameGame(Checkpoint except, string gameName, bool withTagOnly) {
-			List<Checkpoint> same = new();
-			if (gameName.Length > 0) {
-				foreach (Checkpoint checkpoint in CheckpointList.All()) {
-					if (checkpoint.Serial != except.Serial) {
-						CheckpointInfo info = CheckpointInfo.Load(CheckpointInspector.FolderOf(checkpoint.Path));
-						bool sameGame = string.Equals(info.GameName, gameName, StringComparison.OrdinalIgnoreCase);
-						bool hasTag = info.SpeakerTag.Length == 2;
-						if (sameGame == true && (withTagOnly == false || hasTag == true)) {
-							same.Add(checkpoint);
-						}
-					}
-				}
-			}
-			return same;
-		}
-
-
-		/// <summary>
-		/// Picks a dialogue file, learns the tag from it, asks the model once, and stores
-		/// the rule after the user's yes.
-		/// </summary>
-		private static void TeachFromFile(Checkpoint checkpoint, string folder) {
-			List<string> keys = DialogueKeys(checkpoint);
-			keys.Sort(string.CompareOrdinal);
-			int picked = PagedPicker.Pick(keys, "Learn the speaker tag from which file of " + checkpoint.Label + "? (" + keys.Count + ")");
-			if (picked >= 0) {
-				string path = AlignmentLines.DialoguePath(checkpoint, keys[picked]);
-				NametagConvention? learned = NametagConvention.Learn(AlignmentLines.ReadTexts(path), Glossary.Characters(folder));
-				if (learned == null) {
-					Console.WriteLine("No speaker tag could be learned from " + keys[picked] + ". Without a glossary that needs ten tagged lines with four names each appearing twice; with one, five lines naming two known characters. Try a longer file, or fill the glossary first.");
-					ConsoleExt.WaitForEnter("continue");
-				}
-				if (learned != null) {
-					if (AlignmentHints.GaveUp == false) {
-						learned.ConfirmWithModel(checkpoint.Label);
-					}
-					string names = "";
-					int shown = 0;
-					foreach (string name in learned.Names) {
-						if (shown < 10) {
-							if (names.Length > 0) {
-								names += ", ";
-							}
-							names += name;
-							shown++;
-						}
-					}
-					bool adopt = YesNoMenu.Ask("Use " + learned.Opener + "Name" + learned.Closer + " as " + checkpoint.Label + "'s speaker tag?",
-						"Learned from " + keys[picked] + ": " + learned.Describe() + "\nNames seen: " + names, true);
-					if (adopt == true) {
-						CheckpointInfo info = CheckpointInfo.Load(folder);
-						info.SpeakerTag = learned.Stored;
-						string problem = info.Save(folder);
-						if (problem.Length > 0) {
-							Console.WriteLine(problem);
-						}
-						if (problem.Length == 0) {
-							Console.WriteLine("Stored. The walk now reads " + learned.Opener + "Name" + learned.Closer + " as the speaker on " + checkpoint.Label + ".");
-						}
-						ConsoleExt.WaitForEnter("continue");
-					}
-				}
-			}
-		}
-
-
-		private static void ForgetTag(string folder) {
-			CheckpointInfo info = CheckpointInfo.Load(folder);
-			info.SpeakerTag = "";
-			string problem = info.Save(folder);
-			if (problem.Length > 0) {
-				Console.WriteLine(problem);
-			}
-			if (problem.Length == 0) {
-				Console.WriteLine("Forgotten. Every line of this checkpoint counts as untagged in the walk.");
-			}
-			ConsoleExt.WaitForEnter("continue");
-		}
-
-
-		/// <summary>
 		/// Removes a pair's folder with everything in it. The picker row names what goes, so
 		/// picking it is the decision; the pair's checkpoints are untouched.
 		/// </summary>
@@ -399,6 +228,7 @@ namespace TranslationTools {
 					+ "Left:      " + RemainingText(pair, pairing) + "\n");
 			});
 			menu.AddChoice(new ConsoleMenuItem("Walk the lines (resumes where it stopped)").SetActionOnSelect(() => { WalkPair(pair); }));
+			menu.AddChoice(new ConsoleMenuItem("Repair speaker tags from the alignment (once it is complete): pick whose tags are the standard...").SetActionOnSelect(() => { RepairPair(pair); }));
 			menu.AddChoice(new ConsoleMenuItem("Reset progress: forget every pairing of this file").SetActionOnSelect(() => { ResetPair(pair); }));
 			menu.AddChoice(new ConsoleMenuItem("Back"));
 			menu.GetChoice();
@@ -456,12 +286,42 @@ namespace TranslationTools {
 			if (problem.Length == 0 && reference!.Writable == true) {
 				problem = "The reference \"" + reference.Label + "\" is not locked. Lock it, or start a new pair.";
 			}
+			if (problem.Length == 0 && SyncGlossaries(edit!, reference!) == false) {
+				problem = "The two glossaries differ and neither was copied. The walk needs one glossary on both sides.";
+			}
 			if (problem.Length > 0) {
 				Console.WriteLine(problem);
 				ConsoleExt.WaitForEnter("continue");
 			}
 			if (problem.Length == 0) {
 				AlignmentWalk.Run(pair, edit!, reference!);
+			}
+		}
+
+
+		/// <summary>
+		/// Resolves the pair's two checkpoints and hands them to the speaker repair, which
+		/// refuses on its own until the alignment is complete.
+		/// </summary>
+		private static void RepairPair(AlignmentPair pair) {
+			Checkpoint? reference = CheckpointList.FindBySerial(pair.CanonicalSerial);
+			Checkpoint? edit = CheckpointList.FindBySerial(pair.OtherSerial);
+			string problem = "";
+			if (reference == null) {
+				problem = "No checkpoint has the reference serial " + pair.CanonicalSerial + " any more.";
+			}
+			if (problem.Length == 0 && edit == null) {
+				problem = "No checkpoint has the editable serial " + pair.OtherSerial + " any more.";
+			}
+			if (problem.Length == 0 && SyncGlossaries(edit!, reference!) == false) {
+				problem = "The two glossaries differ and neither was copied. The repair reads speakers through one glossary.";
+			}
+			if (problem.Length > 0) {
+				Console.WriteLine(problem);
+				ConsoleExt.WaitForEnter("continue");
+			}
+			if (problem.Length == 0) {
+				SpeakerRepair.Run(pair, edit!, reference!);
 			}
 		}
 
@@ -486,7 +346,7 @@ namespace TranslationTools {
 		/// <param name="except">One not to offer, or null.</param>
 		/// <param name="title">Printed above the list.</param>
 		/// <returns>The pick, or null for Back.</returns>
-		private static Checkpoint? PickCheckpoint(List<Checkpoint> all, Checkpoint? except, string title) {
+		public static Checkpoint? PickCheckpoint(List<Checkpoint> all, Checkpoint? except, string title) {
 			List<Checkpoint> offered = new();
 			List<string> rows = new();
 			foreach (Checkpoint checkpoint in all) {
@@ -503,6 +363,49 @@ namespace TranslationTools {
 				picked = offered[index];
 			}
 			return picked;
+		}
+
+
+		/// <summary>
+		/// A pair walks on one glossary: both checkpoints must hold the same one, byte for
+		/// byte, so a tag resolves the same way on either side and a correction writes the
+		/// shared written name. When they differ the user picks whose glossary is copied over
+		/// the other's, the rows naming what is replaced, or cancels.
+		/// </summary>
+		/// <returns>True when the glossaries are the same afterwards.</returns>
+		public static bool SyncGlossaries(Checkpoint first, Checkpoint second) {
+			string firstFolder = CheckpointInspector.FolderOf(first.Path);
+			string secondFolder = CheckpointInspector.FolderOf(second.Path);
+			bool same = Glossary.SameContent(firstFolder, secondFolder);
+			if (same == false) {
+				ConsoleSelectMenu menu = new(loops: false, numbered: false, clearOnRefresh: true);
+				menu.SetPreChoiceText("The two glossaries differ, and a pair walks on one glossary.\n"
+					+ "\"" + first.Label + "\": " + Glossary.Characters(firstFolder).Count + " characters, " + Glossary.Rules(firstFolder).Count + " rules\n"
+					+ "\"" + second.Label + "\": " + Glossary.Characters(secondFolder).Count + " characters, " + Glossary.Rules(secondFolder).Count + " rules\n");
+				menu.AddChoice(new ConsoleMenuItem("Copy \"" + first.Label + "\"'s glossary over \"" + second.Label + "\"'s (" + second.Label + "'s is replaced)"));
+				menu.AddChoice(new ConsoleMenuItem("Copy \"" + second.Label + "\"'s glossary over \"" + first.Label + "\"'s (" + first.Label + "'s is replaced)"));
+				menu.AddChoice(new ConsoleMenuItem("Cancel"));
+				int choice = menu.GetChoice();
+				string problem = "";
+				if (choice == 0) {
+					problem = Glossary.CopyOver(firstFolder, secondFolder);
+					if (problem.Length == 0) {
+						CheckpointLog.Warning(secondFolder, "Glossary", "glossary replaced by a copy of \"" + first.Label + "\"'s, for alignment");
+					}
+				}
+				if (choice == 1) {
+					problem = Glossary.CopyOver(secondFolder, firstFolder);
+					if (problem.Length == 0) {
+						CheckpointLog.Warning(firstFolder, "Glossary", "glossary replaced by a copy of \"" + second.Label + "\"'s, for alignment");
+					}
+				}
+				if (problem.Length > 0) {
+					Console.WriteLine(problem);
+					ConsoleExt.WaitForEnter("continue");
+				}
+				same = (choice == 0 || choice == 1) && problem.Length == 0;
+			}
+			return same;
 		}
 
 
@@ -597,8 +500,8 @@ namespace TranslationTools {
 			problem = "";
 			string key = "";
 			refKey = "";
-			List<string> editKeys = DialogueKeys(other);
-			List<string> referenceKeys = DialogueKeys(canonical);
+			List<string> editKeys = AlignmentLines.DialogueKeys(other);
+			List<string> referenceKeys = AlignmentLines.DialogueKeys(canonical);
 			editKeys.Sort(string.CompareOrdinal);
 			referenceKeys.Sort(string.CompareOrdinal);
 			if (editKeys.Count == 0 || referenceKeys.Count == 0) {
@@ -637,18 +540,6 @@ namespace TranslationTools {
 				}
 			}
 			return key;
-		}
-
-
-		private static List<string> DialogueKeys(Checkpoint checkpoint) {
-			List<string> keys = new();
-			string dialogues = Path.Combine(CheckpointInspector.FolderOf(checkpoint.Path), CheckpointInspector.SplitFolder, NScripterSplit.DialoguesFolder);
-			if (Directory.Exists(dialogues) == true) {
-				foreach (string file in Directory.GetFiles(dialogues, "*.txt")) {
-					keys.Add(Path.GetFileNameWithoutExtension(file));
-				}
-			}
-			return keys;
 		}
 
 
