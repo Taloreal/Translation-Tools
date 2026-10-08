@@ -13,6 +13,7 @@ namespace TranslationTools {
 		private static readonly ConsoleMenuItem ReportingItem = new("Send build-mode reports");
 		private static readonly ConsoleMenuItem ServiceItem = new("Build-mode service address");
 		private static readonly ConsoleMenuItem RootItem = new("Checkpoints folder");
+		private static readonly ConsoleMenuItem TgdItem = new("");
 
 
 		/// <summary>
@@ -26,6 +27,9 @@ namespace TranslationTools {
 			menu.AddChoice(ServiceItem.SetActionOnSelect(SetServiceAddress));
 			menu.AddChoice(new ConsoleMenuItem("Game installs...").SetActionOnSelect(GameInstallsMenu.Show));
 			menu.AddChoice(new ConsoleMenuItem("Language model...").SetActionOnSelect(LlmMenu.Show));
+			if (TgdFeatures.Available == true) {
+				menu.AddChoice(TgdItem.SetActionOnSelect(ToggleTgd));
+			}
 			menu.AddChoice(new ConsoleMenuItem("Back"));
 			menu.GetChoice();
 		}
@@ -49,7 +53,20 @@ namespace TranslationTools {
 			RootItem.SetText("Checkpoints folder (new checkpoints go in <folder>\\<label>): " + root);
 			ReportingItem.SetText("Send build-mode reports: " + reporting);
 			ServiceItem.SetText("Build-mode service address: " + BuildModeService.AddressForDisplay);
+			string tgd = "off";
+			if (TgdFeatures.Wanted == true) {
+				tgd = "on";
+			}
+			TgdItem.SetText(TgdFeatures.Label + ": TGD anchors in alignment (nametag, voice, nametag check): " + tgd);
 			menu.SetPreChoiceText("-- Settings --\n");
+		}
+
+
+		/// <summary>
+		/// Flips the TGD anchors. The row exists only under a debugger.
+		/// </summary>
+		private static void ToggleTgd() {
+			TgdFeatures.Wanted = TgdFeatures.Wanted == false;
 		}
 
 

@@ -28,6 +28,7 @@ namespace TranslationTools {
 		private const string CanonicalLabelName = "CanonicalLabel";
 		private const string OtherLabelName = "OtherLabel";
 		private const string KeyName = "Key";
+		private const string RefKeyName = "RefKey";
 
 		/// <summary>The pair's folder on disk.</summary>
 		public string Folder = "";
@@ -41,8 +42,11 @@ namespace TranslationTools {
 		/// <summary>The editable checkpoint's serial.</summary>
 		public string OtherSerial = "";
 
-		/// <summary>The dialogue file both sides hold, by key: its name without folder or extension.</summary>
+		/// <summary>The editable side's dialogue file, by key: its name without folder or extension.</summary>
 		public string Key = "";
+
+		/// <summary>The reference side's dialogue file, by key. Usually the same as Key; a scene renamed between versions makes it differ.</summary>
+		public string RefKey = "";
 
 		/// <summary>The reference's label when the pair was made. For reading; the serial is what counts.</summary>
 		public string CanonicalLabel = "";
@@ -59,10 +63,11 @@ namespace TranslationTools {
 		/// </summary>
 		/// <param name="canonical">The locked reference.</param>
 		/// <param name="other">The editable side.</param>
-		/// <param name="key">The dialogue file to align, by key.</param>
+		/// <param name="key">The editable side's dialogue file, by key.</param>
+		/// <param name="refKey">The reference side's dialogue file, by key.</param>
 		/// <param name="problem">Why not, when no folder was made; empty otherwise.</param>
 		/// <returns>The pair, or null when problem says why.</returns>
-		public static AlignmentPair? Create(Checkpoint canonical, Checkpoint other, string key, out string problem) {
+		public static AlignmentPair? Create(Checkpoint canonical, Checkpoint other, string key, string refKey, out string problem) {
 			AlignmentPair? pair = null;
 			string root = AlignmentRoot.Ensure(out problem);
 			if (root.Length > 0) {
@@ -80,6 +85,7 @@ namespace TranslationTools {
 						pair.CanonicalSerial = canonical.Serial;
 						pair.OtherSerial = other.Serial;
 						pair.Key = key;
+						pair.RefKey = refKey;
 						pair.CanonicalLabel = canonical.Label;
 						pair.OtherLabel = other.Label;
 						pair.Save();
@@ -118,6 +124,10 @@ namespace TranslationTools {
 					}
 				}
 			}
+			if (pair.RefKey.Length == 0) {
+				// Pairs from before a reference key existed named one file for both sides.
+				pair.RefKey = pair.Key;
+			}
 			return pair.CanonicalSerial.Length > 0 && pair.OtherSerial.Length > 0 && pair.Key.Length > 0;
 		}
 
@@ -151,6 +161,7 @@ namespace TranslationTools {
 			lines.Add(CanonicalSerialName + "=" + CanonicalSerial);
 			lines.Add(OtherSerialName + "=" + OtherSerial);
 			lines.Add(KeyName + "=" + Key);
+			lines.Add(RefKeyName + "=" + RefKey);
 			lines.Add(CanonicalLabelName + "=" + CanonicalLabel);
 			lines.Add(OtherLabelName + "=" + OtherLabel);
 			lines.AddRange(UnknownLines);
@@ -163,7 +174,19 @@ namespace TranslationTools {
 		/// as they are labelled now, with "(missing)" for a serial no checkpoint has any more.
 		/// </summary>
 		public string Describe() {
-			return Created + "   " + Key.PadRight(12) + " " + SideText(OtherSerial, OtherLabel) + "  ->  " + SideText(CanonicalSerial, CanonicalLabel) + " (reference)";
+			return Created + "   " + FileText().PadRight(12) + " " + SideText(OtherSerial, OtherLabel) + "  ->  " + SideText(CanonicalSerial, CanonicalLabel) + " (reference)";
+		}
+
+
+		/// <summary>
+		/// The file as the user sees it: one key, or "edit -> reference" when the two sides name it differently.
+		/// </summary>
+		public string FileText() {
+			string text = Key;
+			if (RefKey.Length > 0 && RefKey != Key) {
+				text = Key + " -> " + RefKey;
+			}
+			return text;
 		}
 
 
@@ -198,13 +221,16 @@ namespace TranslationTools {
 			if (name == KeyName) {
 				Key = value;
 			}
+			if (name == RefKeyName) {
+				RefKey = value;
+			}
 			if (name == CanonicalLabelName) {
 				CanonicalLabel = value;
 			}
 			if (name == OtherLabelName) {
 				OtherLabel = value;
 			}
-			if (name != CreatedName && name != CanonicalSerialName && name != OtherSerialName && name != KeyName
+			if (name != CreatedName && name != CanonicalSerialName && name != OtherSerialName && name != KeyName && name != RefKeyName
 				&& name != CanonicalLabelName && name != OtherLabelName) {
 				known = false;
 			}

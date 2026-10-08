@@ -347,12 +347,12 @@ namespace TranslationTools {
 						JsonElement first = choices[0];
 						if (first.TryGetProperty("message", out JsonElement message) == true
 							&& message.TryGetProperty("content", out JsonElement content) == true
-							&& content.ValueKind == JsonValueKind.String) {
+							&& content.ValueKind == JsonValueKind.String && (content.GetString() ?? "").Trim().Length > 0) {
 							reply = content.GetString() ?? "";
 							found = true;
 						}
 						if (found == false && first.TryGetProperty("text", out JsonElement text) == true
-							&& text.ValueKind == JsonValueKind.String) {
+							&& text.ValueKind == JsonValueKind.String && (text.GetString() ?? "").Trim().Length > 0) {
 							reply = text.GetString() ?? "";
 							found = true;
 						}

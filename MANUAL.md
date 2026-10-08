@@ -292,8 +292,11 @@ folder per pair, named by the moment it was made; no checkpoint can be labelled
 **reference**: the side that is read and never edited, and that is locked. If one of the
 two is locked, that is the reference. If neither is, you name it and it is locked for you.
 If both are, nothing could be edited and the pair is refused. A sound checkpoint that is
-not split yet is offered a split on the spot; declining cancels the pair. Then you pick the dialogue
-file from those both splits hold. The pair folder's `pair.info` names both sides by
+not split yet is offered a split on the spot; declining cancels the pair. Then you pick the
+dialogue file on the editable side, and the tool asks whether the reference's file of the
+same name is the one to read; say no, or have no such file, and the reference's own list
+opens so you pick the scene wherever that version keeps it. A pair whose two sides name
+the file differently shows as `name -> other name`. The pair folder's `pair.info` names both sides by
 serial and the file by key, so renaming a label or re-pointing a path never loses a pair.
 
 **Open a pair...** lists the pairs, newest first, each showing its file, its editable side,
@@ -303,15 +306,66 @@ opens to its facts and progress, with three choices:
 - **Walk the lines** starts the walk, or resumes it where it stopped. Every answer is
   written at once to `pairing.txt` in the pair folder, so closing the window loses
   nothing.
-- **Reset progress** forgets every decision for the file after a yes, for when a mistake
+- **Reset progress** forgets every decision for the file at once, for when a mistake
   early on is noticed late.
 - **Back**.
+
+**Delete a pair...** lists the pairs and removes the one you pick: its folder with the
+pairings and backups goes, the two checkpoints are untouched. Picking the row is the
+decision; the row says what goes.
 
 ### The walk
 
 The editable side and the reference are read line against line. Two lines of fifteen
 characters or more whose text is nearly the same pair on their own, which carries a
-same-language pair through everything that did not change. Everything else is a question,
+same-language pair through everything that did not change. A shorter line that is
+identical on both sides pairs on its own only when both sides are taught, the speakers
+agree, and the speaker order matches for the **short identical lines** setting's number of
+more lines around it, 2 to start: a short line
+repeats too often to trust by its words alone.
+
+When lines pair up, by any witness or by your own answer, while their speaker tags differ,
+the tool counts that pair of names, across the file and not only in a row, and at the set
+count asks the model once whether the two tags are one name in two languages, a translation or a
+romanization of each other. On a yes, or with no model to ask, it offers to learn them into
+the editable checkpoint's glossary, onto the entry that already carries either name or as
+a new one with the reference's tag as the script name. The count is the **offer to learn
+a speaker** setting, 2 to start. A pair you decline is not asked about again in that walk.
+From then on the walk treats the two as one speaker.
+
+A line is sometimes replaced rather than translated: same speaker, same place, often the
+same voice clip, different words. Where both sides have been taught their speaker tags, the
+walk compares the speaker order around the pair over the speaker-order window from the
+Alignment menu's Settings, 0 to 20, 3 to start, 0 for off. When it matches on both sides, the screen says so and the model is
+told that a line whose words differ there is probably a replaced line, which is still the
+same line.
+
+When that matched run is a **long stretch**, the first of the two stretch settings in the
+Alignment menu's Settings, 10 to start, 0 for off, and the audio
+agrees wherever a line in the run is voiced, with at least the **fewest shared voice
+clips** setting's worth of shared clips, 2 to start, and no contradiction, the pair is made
+with no question to the model or to you. Two independent structural witnesses over that
+many lines are stronger than the model's opinion; the audit still sees the pairs later.
+Audio evidence needs at least one SiglusEngine side, so this never fires on an NScripter-
+against-NScripter pair. Only the current pair is made; the lines looked at around it are
+judged on their own turn.
+
+A **short stretch**, the second setting, 5 to start and always below the long one, is the
+same rule with the model added: the order matches over that many lines, the audio agrees
+on the fewest-shared-clips count somewhere in the stretch, and the model says same line.
+Three witnesses stand in for you where the structure alone would not; a line that is
+itself unvoiced inside a voiced stretch is covered this way. The audit still sees the
+pair later.
+
+The audio speaks first where it can. On SiglusEngine every voiced line names its clip in
+the `koe` call before it, so two lines that call the same clip are the same line unless
+someone re-dubbed the game. When both lines call the same clip and the model also says
+they are the same, they pair without asking. When they call different clips, or one is
+voiced and the other is not, they are not the same line and "Same line" is not offered.
+NScripter has too many ways to play a sound for the tool to read them all, so an
+NScripter line gets audio evidence only when the other side is SiglusEngine: the clip's
+number is looked for in the code between the previous line and this one. Not finding it
+proves nothing; the line may simply be unvoiced. Everything else is a question,
 with both sides shown around the current line, as many lines before and after as the
 language model settings say, and the model's recommendation underneath when a model is
 reachable. The answers:
@@ -322,16 +376,36 @@ reachable. The answers:
 - **Out of order** - the partner is further on. Say which side's line it is, then pick
   its partner from the other side's remaining lines, paged. Lines jumped over stay
   undecided until the walk reaches them.
+- **Accept the model's swap** appears when the model says the partner is the very next line
+  over there and the speakers agree on the cross pair: one answer records both pairs, and
+  the row names all four indexes so you can check them first.
+- **Ask the model again** throws away its answer for this pair and asks afresh.
 - **Undo the previous decision** and **Stop here**.
 
-When the model says the next several lines pair up in order, they are offered as one run
-to accept with a single answer; declining walks them one by one. The model is asked once
-per position and left alone for the rest of the session after two failed replies. It
-only ever recommends; every pairing is yours.
+The model is asked about the one pair in front of you and nothing more: the lines after
+it on both sides are context for its judgement, not further questions. It is asked once
+per position, the screen says so while it thinks, and it is left alone for the rest of
+the session after two failed replies. It only ever recommends; you rule on every line.
 
-Under a debugger, TGD's own anchors switch on: lines whose nametags name the same
-character, through the glossary, pair without asking. That is marked TGD only and is not
-part of the tool for other games.
+Speaker tags are optional and never assumed. By default the walk treats every line of a
+checkpoint as untagged. **Speaker tags...** on the Alignment menu lets you teach a
+checkpoint from one of its own dialogue files: pick the checkpoint, pick a file with plenty
+of spoken lines, and the tool looks for a punctuation pair that opens lines with a name
+between its marks. With a filled character glossary, five lines naming two known characters
+prove it. Without one the tool wants twice the evidence, ten lines and four different names
+each appearing twice, since a cast repeats and speech does not; a file too short for that is
+the wrong file to teach from. It shows what it found, asks the
+model once whether the rule reads right, and stores the rule only after your yes, in the
+checkpoint's own info file. The checkpoint's character glossary helps: a pair whose
+enclosed text is a name the glossary knows, in either language or an alias, counts even
+in a short file. The same submenu copies the tag to another checkpoint of the same game,
+takes it from one, or forgets it. Where both sides of a pair have been taught, a line that names a speaker against a line that does not is evidence: a model
+"same line" there is marked doubtful, and the prompt tells the model so too.
+
+Under a debugger, TGD's own anchors become available: lines whose nametags name the same
+character, through the glossary, pair without asking. They are a switch in Settings,
+shown only under a debugger and marked TGD only, so the general walk can be tested from
+the debugger too. They are not part of the tool for other games.
 
 When one side runs out, every line left on the other is recorded as having no partner and
 the walk is complete. Apply, which renumbers both files from the pairing, is the next
@@ -382,7 +456,7 @@ Each checkpoint has its own glossary, inside its folder:
 MyCheckpoint\
     glossary\
         characters\
-            Ryuuga.txt         one file per character, named after the English name
+            4D6169.txt         one file per character, named by the English name in hex
             ...
         rules.txt              one rule per line, in the order they apply
 ```

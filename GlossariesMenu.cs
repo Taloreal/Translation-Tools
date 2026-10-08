@@ -173,17 +173,17 @@ namespace TranslationTools {
 					Checkpoint? target = PickCheckpoint(others, "Copy \"" + selected.Label + "\"'s glossary to which checkpoint? Its own glossary is replaced.");
 					if (target != null) {
 						string targetFolder = CheckpointInspector.FolderOf(target.Path);
+						// Picking the target is the decision: the picker's title says its glossary
+						// is replaced. A second question here defaulted to no and read as "did
+						// not copy".
 						string had = "";
 						if (Glossary.Exists(targetFolder) == true) {
-							had = " It has " + Glossary.Characters(targetFolder).Count + " characters and " + Glossary.Rules(targetFolder).Count + " rules now, which go.";
+							had = " Its own " + Glossary.Characters(targetFolder).Count + " characters and " + Glossary.Rules(targetFolder).Count + " rules were replaced.";
 						}
-						bool yes = YesNoMenu.Ask("Replace \"" + target.Label + "\"'s glossary?" + had);
-						if (yes == true) {
-							string problem = Glossary.CopyOver(CheckpointInspector.FolderOf(selected.Path), targetFolder);
-							Report(targetFolder, problem, "glossary replaced by a copy of \"" + selected.Label + "\"'s");
-						}
-						if (yes == false) {
-							Console.WriteLine("Kept.");
+						string problem = Glossary.CopyOver(CheckpointInspector.FolderOf(selected.Path), targetFolder);
+						Report(targetFolder, problem, "glossary replaced by a copy of \"" + selected.Label + "\"'s");
+						if (problem.Length == 0) {
+							Console.WriteLine("Copied to \"" + target.Label + "\"." + had);
 						}
 						ConsoleExt.WaitForEnter("continue");
 					}

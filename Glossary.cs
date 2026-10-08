@@ -98,7 +98,7 @@ namespace TranslationTools {
 		public static string SaveCharacter(string checkpointFolder, CharacterEntry entry) {
 			string problem = "";
 			if (IsFileSafe(entry.En) == false) {
-				problem = "The English name has to be usable as a file name.";
+				problem = "The English name cannot be blank.";
 			}
 			if (problem.Length == 0) {
 				try {
@@ -112,7 +112,8 @@ namespace TranslationTools {
 					text.Append(NotesName).Append('=').Append(entry.Notes).AppendLine();
 					text.Append(ProfileHeader).AppendLine();
 					text.Append(entry.Profile);
-					File.WriteAllText(Path.Combine(folder, entry.En + ".txt"), text.ToString(), new UTF8Encoding(false));
+					RemoveOldFile(folder, entry.En);
+					File.WriteAllText(Path.Combine(folder, FileNameFor(entry.En)), text.ToString(), new UTF8Encoding(false));
 				}
 				catch (Exception exception) {
 					problem = "Could not write the character: " + exception.Message;
@@ -126,10 +127,12 @@ namespace TranslationTools {
 		/// Deletes a character's file.
 		/// </summary>
 		public static void RemoveCharacter(string checkpointFolder, string englishName) {
-			string path = Path.Combine(FolderOf(checkpointFolder), CharactersFolder, englishName + ".txt");
+			string folder = Path.Combine(FolderOf(checkpointFolder), CharactersFolder);
+			string path = Path.Combine(folder, FileNameFor(englishName));
 			if (File.Exists(path) == true) {
 				File.Delete(path);
 			}
+			RemoveOldFile(folder, englishName);
 		}
 
 
@@ -338,13 +341,49 @@ namespace TranslationTools {
 
 
 		private static bool IsFileSafe(string name) {
-			bool safe = name.Trim().Length > 0;
+			return name.Trim().Length > 0;
+		}
+
+
+		/// <summary>
+		/// The file a character is kept in: its English name's UTF-8 bytes as hex, so any
+		/// name at all - "???" is a common placeholder speaker - has a file, and the name
+		/// inside the file stays exactly as typed. The name is read from inside the file,
+		/// never from the file name.
+		/// </summary>
+		public static string FileNameFor(string englishName) {
+			StringBuilder name = new();
+			foreach (byte piece in Encoding.UTF8.GetBytes(englishName.Trim())) {
+				name.Append(piece.ToString("X2"));
+			}
+			return name.ToString() + ".txt";
+		}
+
+
+		/// <summary>
+		/// The file an older build gave a character: the English name itself. Empty when
+		/// that name could not be a file name, since no such file can exist.
+		/// </summary>
+		private static string OldFileNameFor(string englishName) {
+			string name = englishName.Trim() + ".txt";
 			foreach (char bad in Path.GetInvalidFileNameChars()) {
-				if (name.IndexOf(bad) >= 0) {
-					safe = false;
+				if (englishName.IndexOf(bad) >= 0) {
+					name = "";
 				}
 			}
-			return safe;
+			return name;
+		}
+
+
+		/// <summary>
+		/// Deletes a character's file from an older build, if one exists, so a save under
+		/// the hex name leaves no duplicate.
+		/// </summary>
+		private static void RemoveOldFile(string folder, string englishName) {
+			string old = OldFileNameFor(englishName);
+			if (old.Length > 0 && File.Exists(Path.Combine(folder, old)) == true) {
+				File.Delete(Path.Combine(folder, old));
+			}
 		}
 
 

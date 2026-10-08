@@ -222,10 +222,11 @@ namespace TranslationTools {
 		}
 
 
+
 		/// <summary>
 		/// Shows a whole-number setting and reads a new one inside a range; blank keeps it.
 		/// </summary>
-		private static void SetWholeNumber(string label, int current, int least, int most, Action<int> store) {
+		public static void SetWholeNumber(string label, int current, int least, int most, Action<int> store) {
 			Console.WriteLine("Current: " + current);
 			string answer = ConsoleExt.ReadLine(label + ", " + least + " to " + most + " (blank keeps it): ", -1, false).Trim();
 			if (answer.Length > 0) {

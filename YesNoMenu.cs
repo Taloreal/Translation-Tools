@@ -8,7 +8,8 @@ namespace TranslationTools {
 	/// The one way the tool asks a yes-or-no question: a menu with a single row that Left
 	/// and Right flip between no and yes, Enter taking what it shows, plus a Cancel row when
 	/// cancelling means something other than no. The row starts at no, so Enter alone never
-	/// says yes to anything. Replaces typed (y/n) prompts everywhere.
+	/// says yes to anything, except where the caller says yes is the harmless, expected
+	/// answer. Replaces typed (y/n) prompts everywhere.
 	/// </summary>
 	public static class YesNoMenu {
 
@@ -17,10 +18,11 @@ namespace TranslationTools {
 		/// </summary>
 		/// <param name="question">The question, without a trailing prompt.</param>
 		/// <param name="context">Lines to show above the question; empty for none.</param>
+		/// <param name="startYes">True to start the row at yes: only for a question where yes is harmless and expected, never for one that destroys anything.</param>
 		/// <returns>True for yes.</returns>
-		public static bool Ask(string question, string context = "") {
+		public static bool Ask(string question, string context = "", bool startYes = false) {
 			bool cancelled = false;
-			return Show(question, context, false, out cancelled);
+			return Show(question, context, false, startYes, out cancelled);
 		}
 
 
@@ -32,12 +34,12 @@ namespace TranslationTools {
 		/// <param name="context">Lines to show above the question; empty for none.</param>
 		/// <returns>True for yes.</returns>
 		public static bool AskOrCancel(string question, out bool cancelled, string context = "") {
-			return Show(question, context, true, out cancelled);
+			return Show(question, context, true, false, out cancelled);
 		}
 
 
-		private static bool Show(string question, string context, bool allowCancel, out bool cancelled) {
-			bool yes = false;
+		private static bool Show(string question, string context, bool allowCancel, bool startYes, out bool cancelled) {
+			bool yes = startYes;
 			bool wasCancelled = false;
 			ConsoleSelectMenu menu = new(loops: false, numbered: false, clearOnRefresh: true);
 			string above = "";

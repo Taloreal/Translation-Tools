@@ -18,6 +18,7 @@ namespace TranslationTools {
 		private const string GameNameName = "GameName";
 		private const string VndbIdName = "VndbId";
 		private const string BuiltWithName = "BuiltWith";
+		private const string SpeakerTagName = "SpeakerTag";
 
 
 		/// <summary>
@@ -53,6 +54,9 @@ namespace TranslationTools {
 							info.BuiltWith = parsed == true
 								? mode
 								: Checkpoint.NoBuildMode;
+						}
+						if (name == SpeakerTagName) {
+							info.SpeakerTag = value;
 						}
 					}
 				}
@@ -109,6 +113,13 @@ namespace TranslationTools {
 		/// </summary>
 		public int BuiltWith = Checkpoint.NoBuildMode;
 
+		/// <summary>
+		/// How this checkpoint's dialogue files mark the speaker, as the opening and closing
+		/// characters of the tag, e.g. "【】": learned from a file the user pointed at, through
+		/// the Alignment menu. Optional; empty means the walk treats every line as untagged.
+		/// </summary>
+		public string SpeakerTag = "";
+
 
 		/// <summary>
 		/// Writes the file at the top of a checkpoint's folder, replacing what was there.
@@ -120,7 +131,8 @@ namespace TranslationTools {
 			try {
 				string text = GameNameName + "=" + GameName + Environment.NewLine
 					+ VndbIdName + "=" + VndbId + Environment.NewLine
-					+ BuiltWithName + "=" + BuiltWith + Environment.NewLine;
+					+ BuiltWithName + "=" + BuiltWith + Environment.NewLine
+					+ SpeakerTagName + "=" + SpeakerTag + Environment.NewLine;
 				File.WriteAllText(Path.Combine(folder, FileName), text);
 			}
 			catch (Exception exception) {

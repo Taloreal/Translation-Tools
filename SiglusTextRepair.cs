@@ -37,21 +37,93 @@ namespace TranslationTools {
 		public static string QuoteLine(string line, int number, List<string> warnings) {
 			ReportUnmatched(line, number, NametagOpen, NametagClose, warnings);
 			ReportUnmatched(line, number, SpeechOpen, SpeechClose, warnings);
-			bool quoteWhole = line.Length > 0 && OpensJapanese(line[0]);
+			// A "//" comment outside the quotes is not text: it comes off before any rule
+			// looks at the line's end, and goes back on, unchanged, after.
+			string comment = "";
+			int commentAt = CommentStart(line);
+			if (commentAt >= 0) {
+				comment = line.Substring(commentAt);
+				line = line.Substring(0, commentAt);
+			}
 			string repaired = QuotePairs(line, number, NametagOpen, NametagClose, true, false, warnings);
 			repaired = QuotePairs(repaired, number, SpeechOpen, SpeechClose, false, true, warnings);
+			// The whole line is prose when Japanese still sits outside the quotes after the
+			// pairs are done - whatever character the line happens to open with.
+			bool quoteWhole = HasJapaneseOutsideQuotes(repaired);
 			if (quoteWhole == true) {
+				// A nametag at the front stays outside the string: only what follows it is
+				// prose. Folding would otherwise pull 【"name"】 inside the quotes.
+				string nametag = "";
+				if (repaired.StartsWith(NametagOpen) == true) {
+					int close = repaired.IndexOf(NametagClose);
+					if (close > 0) {
+						nametag = repaired.Substring(0, close + 1);
+						repaired = repaired.Substring(close + 1);
+					}
+				}
+				string trailing = repaired.Substring(repaired.TrimEnd().Length);
+				string trimmed = repaired.TrimEnd();
 				string suffix = "";
-				if (repaired.EndsWith("nl", StringComparison.Ordinal) == true) {
+				if (trimmed.EndsWith("nl", StringComparison.Ordinal) == true) {
 					suffix = "nl";
 				}
-				if (suffix.Length == 0 && repaired.EndsWith("r", StringComparison.Ordinal) == true) {
+				if (suffix.Length == 0 && trimmed.EndsWith("r", StringComparison.Ordinal) == true) {
 					suffix = "r";
 				}
-				string body = repaired.Substring(0, repaired.Length - suffix.Length);
-				repaired = QuoteKeepingOperators(body) + suffix;
+				string body = trimmed.Substring(0, trimmed.Length - suffix.Length);
+				repaired = nametag + QuoteKeepingOperators(body) + suffix + trailing;
 			}
-			return repaired;
+			return repaired + comment;
+		}
+
+
+		/// <summary>
+		/// Where a "//" comment outside the quotes begins, or -1 when the line has none.
+		/// </summary>
+		private static int CommentStart(string line) {
+			int start = -1;
+			bool inside = false;
+			int at = 0;
+			while (start < 0 && at < line.Length) {
+				char current = line[at];
+				bool escapedQuote = inside == true && current == '\\' && at + 1 < line.Length && line[at + 1] == '"';
+				if (escapedQuote == true) {
+					at += 1;
+				}
+				if (escapedQuote == false && current == '"') {
+					inside = inside == false;
+				}
+				if (escapedQuote == false && inside == false && current == '/' && at + 1 < line.Length && line[at + 1] == '/') {
+					start = at;
+				}
+				at += 1;
+			}
+			return start;
+		}
+
+
+		/// <summary>
+		/// Whether any Japanese character (by OpensJapanese) sits outside the quotes.
+		/// </summary>
+		private static bool HasJapaneseOutsideQuotes(string line) {
+			bool found = false;
+			bool inside = false;
+			int at = 0;
+			while (found == false && at < line.Length) {
+				char current = line[at];
+				bool escapedQuote = inside == true && current == '\\' && at + 1 < line.Length && line[at + 1] == '"';
+				if (escapedQuote == true) {
+					at += 1;
+				}
+				if (escapedQuote == false && current == '"') {
+					inside = inside == false;
+				}
+				if (escapedQuote == false && inside == false && current != '"' && OpensJapanese(current) == true) {
+					found = true;
+				}
+				at += 1;
+			}
+			return found;
 		}
 
 

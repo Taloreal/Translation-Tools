@@ -52,24 +52,47 @@ namespace TranslationTools {
 		/// Every pointer line of a dialogue file, in file order. Header and blank lines are skipped.
 		/// </summary>
 		public static List<AlignmentLine> Read(string dialoguePath) {
+			return Read(dialoguePath, NametagConvention.Tgd());
+		}
+
+
+		/// <summary>
+		/// Every pointer line of a dialogue file, in file order, with speakers read by a
+		/// convention. Null means the file is not known to tag speakers: no line gets one.
+		/// </summary>
+		/// <param name="dialoguePath">The dialogue file.</param>
+		/// <param name="convention">How this file tags its speaker, or null for none known.</param>
+		public static List<AlignmentLine> Read(string dialoguePath, NametagConvention? convention) {
 			List<AlignmentLine> lines = new();
 			foreach (string raw in NScripterSplit.ReadLines(dialoguePath)) {
 				if (NScripterSplit.TryReadPointer(raw, out string pointer, out int index, out string rest) == true) {
 					AlignmentLine line = new();
 					line.Index = index;
 					line.Text = rest;
-					if (rest.StartsWith("【") == true) {
-						int close = rest.IndexOf('】');
-						if (close > 0) {
-							line.HasNametag = true;
-							line.Name = rest.Substring(1, close - 1).Trim().Trim('"').Trim();
-						}
+					if (convention != null && convention.Matches(rest, out string name) == true) {
+						line.HasNametag = true;
+						line.Name = name;
 					}
-					line.Bare = BareText(rest);
+					line.Bare = BareText(rest, convention);
 					lines.Add(line);
 				}
 			}
 			return lines;
+		}
+
+
+		/// <summary>
+		/// The text after the pointer of every pointer line, for learning the file's
+		/// speaker-tag convention before the lines are read.
+		/// </summary>
+		public static List<string> ReadTexts(string dialoguePath) {
+			List<string> texts = new();
+			foreach (string raw in NScripterSplit.ReadLines(dialoguePath)) {
+				if (NScripterSplit.TryReadPointer(raw, out string pointer, out int index, out string rest) == true) {
+					texts.Add(rest);
+				}
+			}
+			return texts;
 		}
 
 
@@ -80,33 +103,116 @@ namespace TranslationTools {
 		/// characters go.
 		/// </summary>
 		public static string BareText(string rest) {
+			return BareText(rest, NametagConvention.Tgd());
+		}
+
+
+		/// <summary>
+		/// The words of a line and nothing else, with the speaker tag read by a convention.
+		/// </summary>
+		/// <param name="rest">The text after the pointer.</param>
+		/// <param name="convention">How the file tags its speaker, or null for none known.</param>
+		public static string BareText(string rest, NametagConvention? convention) {
 			string text = rest;
-			if (text.StartsWith("【") == true) {
-				int close = text.IndexOf('】');
+			if (convention != null && convention.Matches(text, out string name) == true) {
+				int close = text.IndexOf(convention.Closer, 1);
 				if (close > 0) {
 					text = text.Substring(close + 1);
 				}
 			}
+			text = CutComment(text);
 			StringBuilder bare = new();
 			if (text.Contains('"') == true) {
+				// Quoted (Siglus): keep what sits inside the quotes. A backslash-escaped quote
+				// is a letter, not a boundary. Leaving one quoted part for the next means a
+				// control word (a line break) stood between, so a space stands in for it.
 				bool inside = false;
-				foreach (char letter in text) {
-					if (letter == '"') {
+				int at = 0;
+				while (at < text.Length) {
+					char letter = text[at];
+					bool escapedQuote = inside == true && letter == '\\' && at + 1 < text.Length && text[at + 1] == '"';
+					if (escapedQuote == true) {
+						bare.Append('"');
+						at++;
+					}
+					if (escapedQuote == false && letter == '"') {
+						if (inside == true) {
+							bare.Append(' ');
+						}
 						inside = inside == false;
 					}
-					if (letter != '"' && inside == true) {
+					if (escapedQuote == false && letter != '"' && inside == true) {
 						bare.Append(letter);
 					}
+					at++;
 				}
 			}
 			if (text.Contains('"') == false) {
-				foreach (char letter in text) {
-					if (letter != '`' && letter != '\\' && letter != '@') {
-						bare.Append(letter);
+				// Unquoted: an NScripter line, or a Siglus line the repair left bare. Standing-alone
+				// control words go, then the click-wait marks.
+				text = text.TrimEnd();
+				// A Siglus control word may be glued to the sentence ("出た。r"). It is only taken
+				// off when what precedes it is not an ASCII letter, so an English word ending in r
+				// is left alone.
+				bool trimmed = true;
+				while (trimmed == true) {
+					trimmed = false;
+					foreach (string control in new string[] { "nl", "r" }) {
+						if (trimmed == false && text.EndsWith(control, StringComparison.Ordinal) == true) {
+							int cut = text.Length - control.Length;
+							bool glued = cut > 0 && char.IsAsciiLetter(text[cut - 1]) == true;
+							if (glued == false) {
+								text = text.Substring(0, cut).TrimEnd();
+								trimmed = true;
+							}
+						}
+					}
+				}
+				foreach (string word in text.Split(' ')) {
+					bool controlWord = word == "r" || word == "nl";
+					if (controlWord == false) {
+						foreach (char letter in word) {
+							if (letter != '`' && letter != '\\' && letter != '@') {
+								bare.Append(letter);
+							}
+						}
+						bare.Append(' ');
 					}
 				}
 			}
-			return bare.ToString().Trim();
+			string joined = bare.ToString();
+			while (joined.Contains("  ") == true) {
+				joined = joined.Replace("  ", " ");
+			}
+			return joined.Trim();
+		}
+
+
+		/// <summary>
+		/// Cuts a trailing "//" comment that sits outside the quotes. One inside a quoted
+		/// string is text and stays.
+		/// </summary>
+		private static string CutComment(string text) {
+			string kept = text;
+			bool inside = false;
+			int at = 0;
+			bool cut = false;
+			while (cut == false && at < text.Length) {
+				char letter = text[at];
+				bool escapedQuote = inside == true && letter == '\\' && at + 1 < text.Length && text[at + 1] == '"';
+				if (escapedQuote == true) {
+					at++;
+				}
+				if (escapedQuote == false && letter == '"') {
+					inside = inside == false;
+				}
+				if (escapedQuote == false && inside == false && letter == '/' && at + 1 < text.Length && text[at + 1] == '/') {
+					kept = text.Substring(0, at);
+					cut = true;
+				}
+				at++;
+			}
+			return kept;
 		}
 
 
@@ -138,14 +244,59 @@ namespace TranslationTools {
 
 
 		/// <summary>
-		/// A short form of a line's text for a row or a prompt.
+		/// A short form of a line's text for a row or a prompt, cut by console columns: a
+		/// Japanese or other wide character takes two, so a cut line never wraps.
 		/// </summary>
-		public static string Preview(string text, int most) {
-			string shown = text.Replace("\r", " ").Replace("\n", " ");
-			if (shown.Length > most) {
-				shown = shown.Substring(0, most) + "...";
+		/// <param name="text">The text.</param>
+		/// <param name="columns">The most columns it may take, the "..." included.</param>
+		public static string Preview(string text, int columns) {
+			string flat = text.Replace("\r", " ").Replace("\n", " ");
+			string shown = flat;
+			if (Columns(flat) > columns) {
+				StringBuilder cut = new();
+				int used = 0;
+				int room = Math.Max(0, columns - 3);
+				foreach (char letter in flat) {
+					int width = ColumnsOf(letter);
+					if (used + width <= room) {
+						cut.Append(letter);
+						used += width;
+					}
+				}
+				shown = cut.ToString() + "...";
 			}
 			return shown;
+		}
+
+
+		/// <summary>
+		/// How many console columns a text takes.
+		/// </summary>
+		public static int Columns(string text) {
+			int columns = 0;
+			foreach (char letter in text) {
+				columns += ColumnsOf(letter);
+			}
+			return columns;
+		}
+
+
+		/// <summary>
+		/// Two for a wide character (CJK, kana, full-width forms), one for anything else.
+		/// </summary>
+		private static int ColumnsOf(char letter) {
+			int columns = 1;
+			bool wide = (letter >= 'ᄀ' && letter <= 'ᅟ')
+				|| (letter >= '⺀' && letter <= '꓏')
+				|| (letter >= '가' && letter <= '힣')
+				|| (letter >= '豈' && letter <= '﫿')
+				|| (letter >= '︰' && letter <= '﹏')
+				|| (letter >= '＀' && letter <= '｠')
+				|| (letter >= '￠' && letter <= '￦');
+			if (wide == true) {
+				columns = 2;
+			}
+			return columns;
 		}
 
 
