@@ -15,3 +15,6 @@ Scripts/*.log
 
 # Visual Studio drops Azure boilerplate here; not part of the tool.
 .github/
+
+# The settings store (holds the model API key) lands beside the exe; never commit one.
+*.TAL
