@@ -102,6 +102,7 @@ namespace TranslationTools {
 								files++;
 								if (write == true) {
 									File.WriteAllBytes(path, SiglusScript.ScriptEncoding.GetBytes(string.Join("\n", raw)));
+									CheckpointStamps.RefreshDialogue(CheckpointInspector.FolderOf(checkpoint.Path), Path.GetFileNameWithoutExtension(path));
 								}
 							}
 						}
@@ -193,6 +194,7 @@ namespace TranslationTools {
 				}
 				if (found == true) {
 					File.WriteAllBytes(path, SiglusScript.ScriptEncoding.GetBytes(string.Join("\n", raw)));
+					CheckpointStamps.RefreshDialogue(CheckpointInspector.FolderOf(checkpoint.Path), key);
 				}
 			}
 			catch (Exception exception) {

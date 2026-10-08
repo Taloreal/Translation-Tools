@@ -24,7 +24,8 @@ namespace TranslationTools {
 			NametagConvention? editTags = NametagConvention.For(edit);
 			NametagConvention? refTags = NametagConvention.For(reference);
 			string problem = "";
-			if (pairing.Status != AlignmentPairing.Complete) {
+			bool finished = pairing.Status == AlignmentPairing.Complete || pairing.Status == AlignmentPairing.Applied;
+			if (finished == false) {
 				problem = "The alignment of " + pair.Key + " is not complete (" + pairing.Status + "). Walk it to the end first; the repair trusts only a finished pairing.";
 			}
 			if (problem.Length == 0 && (editTags == null || refTags == null)) {

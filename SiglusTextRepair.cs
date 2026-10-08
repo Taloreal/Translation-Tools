@@ -18,6 +18,10 @@ namespace TranslationTools {
 	/// Quotes already at the edges of a bracket's content, or just outside the brackets,
 	/// are taken off before exactly one is put on, so a line that was half-quoted by hand
 	/// comes out the same as one never touched. Unmatched brackets are reported, not fixed.
+	/// The whole-line case looks for Japanese anywhere outside the quotes, not only at
+	/// column zero, and counts Japanese punctuation as prose, so a line of ellipses alone
+	/// is quoted too - the old repair scripts' corner-bracket, ellipsis and full-width-digit
+	/// cases fall out of that one rule.
 	/// </summary>
 	public static class SiglusTextRepair {
 
@@ -51,6 +55,10 @@ namespace TranslationTools {
 			// pairs are done - whatever character the line happens to open with.
 			bool quoteWhole = HasJapaneseOutsideQuotes(repaired);
 			if (quoteWhole == true) {
+				// Indentation belongs to the .ss, not to the string: it comes off first and
+				// goes back in front of the quotes.
+				string indent = repaired.Substring(0, repaired.Length - repaired.TrimStart(' ', '\t').Length);
+				repaired = repaired.Substring(indent.Length);
 				// A nametag at the front stays outside the string: only what follows it is
 				// prose. Folding would otherwise pull 【"name"】 inside the quotes.
 				string nametag = "";
@@ -71,7 +79,7 @@ namespace TranslationTools {
 					suffix = "r";
 				}
 				string body = trimmed.Substring(0, trimmed.Length - suffix.Length);
-				repaired = nametag + QuoteKeepingOperators(body) + suffix + trailing;
+				repaired = indent + nametag + QuoteKeepingOperators(body) + suffix + trailing;
 			}
 			return repaired + comment;
 		}
@@ -118,12 +126,30 @@ namespace TranslationTools {
 				if (escapedQuote == false && current == '"') {
 					inside = inside == false;
 				}
-				if (escapedQuote == false && inside == false && current != '"' && OpensJapanese(current) == true) {
+				if (escapedQuote == false && inside == false && current != '"' && (OpensJapanese(current) == true || IsJapanesePunctuation(current) == true)) {
 					found = true;
 				}
 				at += 1;
 			}
 			return found;
+		}
+
+
+		/// <summary>
+		/// Whether a character is Japanese prose punctuation: the two ellipses, the ideographic
+		/// comma and stop, the corner brackets, the full-width comma, stop, exclamation and
+		/// question marks, the middle dot and the wave dash. A line of nothing but these -
+		/// "………" as a beat of silence - is prose and has to be quoted like any other; Siglus
+		/// code is ASCII, so none of them ever sits outside quotes in a code line.
+		/// </summary>
+		public static bool IsJapanesePunctuation(char character) {
+			int code = (int)character;
+			bool ellipsis = code == 0x2025 || code == 0x2026;
+			bool ideographic = code >= 0x3001 && code <= 0x3003;
+			bool corners = code >= 0x300C && code <= 0x300F;
+			bool fullWidth = code == 0xFF01 || code == 0xFF0C || code == 0xFF0E || code == 0xFF1F || code == 0xFF5E;
+			bool middleDot = code == 0x30FB;
+			return ellipsis || ideographic || corners || fullWidth || middleDot;
 		}
 
 

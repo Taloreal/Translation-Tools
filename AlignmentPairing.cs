@@ -45,6 +45,9 @@ namespace TranslationTools {
 		/// <summary>The status word once every line on both sides has been decided.</summary>
 		public const string Complete = "complete";
 
+		/// <summary>The status once Apply renumbered the files: the record is history, read by the repair, never walked again.</summary>
+		public const string Applied = "applied";
+
 		/// <summary>The pair folder.</summary>
 		public string Folder = "";
 
@@ -163,6 +166,33 @@ namespace TranslationTools {
 		/// </summary>
 		public void MarkComplete() {
 			Status = Complete;
+			Save();
+		}
+
+
+		/// <summary>
+		/// Moves every entry to the new indexes Apply gave the files, so a pair reads n
+		/// against n, and marks the record applied. A walk or a reset is refused from here:
+		/// the numbers they would work on no longer exist in the files.
+		/// </summary>
+		public void Renumber(Dictionary<int, int> editMap, Dictionary<int, int> refMap) {
+			pairedEdit.Clear();
+			pairedRef.Clear();
+			foreach (PairingEntry entry in Entries) {
+				if (entry.Edit >= 0 && editMap.ContainsKey(entry.Edit) == true) {
+					entry.Edit = editMap[entry.Edit];
+				}
+				if (entry.Ref >= 0 && refMap.ContainsKey(entry.Ref) == true) {
+					entry.Ref = refMap[entry.Ref];
+				}
+				if (entry.Edit >= 0) {
+					pairedEdit.Add(entry.Edit);
+				}
+				if (entry.Ref >= 0) {
+					pairedRef.Add(entry.Ref);
+				}
+			}
+			Status = Applied;
 			Save();
 		}
 

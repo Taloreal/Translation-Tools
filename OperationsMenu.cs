@@ -22,6 +22,7 @@ namespace TranslationTools {
 		private static readonly ConsoleMenuItem SplitItem = new("Split");
 		private static readonly ConsoleMenuItem JoinItem = new("Join");
 		private static readonly ConsoleMenuItem BuildItem = new("Build");
+		private static readonly ConsoleMenuItem RunItem = new("Run");
 
 		/// <summary>Whether Extract may discard an existing split. Off whenever the menu opens.</summary>
 		private static bool ExtractStartOver = false;
@@ -35,6 +36,9 @@ namespace TranslationTools {
 		/// <summary>Whether Build copies the master into backups\ before replacing it. Off whenever the menu opens.</summary>
 		private static bool BuildBackUp = false;
 
+		/// <summary>Whether Run copies the live archive into backups\ before installing over it; off until flipped, every time the menu opens.</summary>
+		private static bool RunBackUp = false;
+
 
 		/// <summary>
 		/// Shows the menu until the user chooses Back.
@@ -44,6 +48,7 @@ namespace TranslationTools {
 			SplitStartOver = false;
 			JoinBackUp = false;
 			BuildBackUp = false;
+			RunBackUp = false;
 			ConsoleSelectMenu menu = new(loops: true, numbered: false, clearOnRefresh: true);
 			menu.AddOnDrawMenuAction(RefreshHeader);
 			menu.AddChoice(new ConsoleMenuItem("Recover   rebuild a missing master or its sources").SetActionOnSelect(RecoverOperation.Run));
@@ -51,17 +56,19 @@ namespace TranslationTools {
 			menu.AddChoice(SplitItem.SetActionOnSelect(RunSplit));
 			menu.AddChoice(JoinItem.SetActionOnSelect(RunJoin));
 			menu.AddChoice(BuildItem.SetActionOnSelect(RunBuild));
-			menu.AddChoice(new ConsoleMenuItem("Run       install the master into the game and start it").SetActionOnSelect(RunOperation.Run));
+			menu.AddChoice(RunItem.SetActionOnSelect(RunRun));
 			menu.AddChoice(new ConsoleMenuItem("Back"));
 			ExtractItem.AddOnKeyPressAction(ToggleExtractStartOver);
 			SplitItem.AddOnKeyPressAction(ToggleSplitStartOver);
 			JoinItem.AddOnKeyPressAction(ToggleJoinBackUp);
 			BuildItem.AddOnKeyPressAction(ToggleBuildBackUp);
+			RunItem.AddOnKeyPressAction(ToggleRunBackUp);
 			menu.GetChoice();
 			ExtractItem.RemoveOnKeyPressAction(ToggleExtractStartOver);
 			SplitItem.RemoveOnKeyPressAction(ToggleSplitStartOver);
 			JoinItem.RemoveOnKeyPressAction(ToggleJoinBackUp);
 			BuildItem.RemoveOnKeyPressAction(ToggleBuildBackUp);
+			RunItem.RemoveOnKeyPressAction(ToggleRunBackUp);
 		}
 
 
@@ -93,6 +100,7 @@ namespace TranslationTools {
 			SplitItem.SetText("Split     extract\\ -> split\\     <- start over: " + StartOverWord(SplitStartOver) + " ->");
 			JoinItem.SetText("Join      split\\ -> extract\\     <- back up first: " + BackUpWord(JoinBackUp) + " ->");
 			BuildItem.SetText("Build     extract\\ -> master     <- back up first: " + BackUpWord(BuildBackUp) + " ->");
+			RunItem.SetText("Run       master -> the game      <- back up the live archive first: " + BackUpWord(RunBackUp) + " ->");
 		}
 
 
@@ -151,6 +159,14 @@ namespace TranslationTools {
 		}
 
 
+		/// <summary>Left or Right on Run flips its own switch.</summary>
+		private static void ToggleRunBackUp(ConsoleMenuItem? item, ConsoleKeyInfo key) {
+			if (IsSideways(key) == true) {
+				RunBackUp = RunBackUp == false;
+			}
+		}
+
+
 		private static void RunExtract() {
 			ExtractOperation.Run(ExtractStartOver);
 			ExtractStartOver = false;
@@ -166,6 +182,12 @@ namespace TranslationTools {
 		private static void RunJoin() {
 			JoinOperation.Run(JoinBackUp);
 			JoinBackUp = false;
+		}
+
+
+		private static void RunRun() {
+			RunOperation.Run(RunBackUp);
+			RunBackUp = false;
 		}
 
 

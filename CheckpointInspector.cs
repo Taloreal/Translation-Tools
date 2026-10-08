@@ -318,7 +318,8 @@ namespace TranslationTools {
 					|| string.Equals(name, SourceHashes.FileName, StringComparison.OrdinalIgnoreCase)
 					|| string.Equals(name, CheckpointInfo.FileName, StringComparison.OrdinalIgnoreCase)
 					|| string.Equals(name, Glossary.FolderName, StringComparison.OrdinalIgnoreCase)
-					|| string.Equals(name, ChoiceLocations.FileName, StringComparison.OrdinalIgnoreCase);
+					|| string.Equals(name, ChoiceLocations.FileName, StringComparison.OrdinalIgnoreCase)
+					|| string.Equals(name, CheckpointStamps.FileName, StringComparison.OrdinalIgnoreCase);
 				if (allowed == false) {
 					if (shown < 3) {
 						extras += " " + name;

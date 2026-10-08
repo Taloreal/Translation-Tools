@@ -7,7 +7,8 @@ namespace TranslationTools {
 
 	/// <summary>
 	/// Run: installs the checkpoint's master into the game and starts the game. The live
-	/// archive is backed up into the checkpoint's backups\ first, every time. The checkpoint
+	/// archive is backed up into the checkpoint's backups\ first only when the user says so
+	/// on the way, since a build loop runs hundreds of times. The checkpoint
 	/// points at one of the game installs this machine knows (GameInstallList), which holds
 	/// the launcher; Run asks for one the first time, and is gated on that folder holding
 	/// the engine's start-up files beside the archive.
@@ -17,7 +18,8 @@ namespace TranslationTools {
 		/// <summary>
 		/// Runs on the selected checkpoint, printing as it goes, and pauses at the end.
 		/// </summary>
-		public static void Run() {
+		/// <param name="backUp">Whether the live archive is copied into backups\ before it is overwritten; the menu row's own switch.</param>
+		public static void Run(bool backUp) {
 			Checkpoint? checkpoint = CheckpointList.Selected();
 			string problem = "";
 			string folder = "";
@@ -55,7 +57,9 @@ namespace TranslationTools {
 			}
 
 			if (problem.Length == 0) {
-				problem = Install(folder, master, game!);
+				// A backup is an affirmative choice made on the menu row, never a side effect:
+				// hundreds of build iterations would otherwise pile up copies nobody restores from.
+				problem = Install(folder, master, game!, backUp);
 			}
 			if (problem.Length == 0) {
 				problem = Launch(install!.Folder, install.Launcher, install.Arguments);
@@ -266,12 +270,14 @@ namespace TranslationTools {
 
 
 		/// <summary>
-		/// Backs the live archive up into the checkpoint's backups\, then copies the master
-		/// over it. The backup is taken and checked before anything is overwritten. For
-		/// NScripter a live 0.txt is moved into backups\ as well, since the engine loads it
-		/// in preference to nscript.dat and would otherwise ignore what was just installed.
+		/// Copies the master over the live archive, backing the live one up into the
+		/// checkpoint's backups\ first only when asked: the backup is taken and checked
+		/// before anything is overwritten. For NScripter a live 0.txt is always moved into
+		/// backups\, since the engine loads it in preference to nscript.dat and would
+		/// otherwise ignore what was just installed; that is a necessity, not a backup.
 		/// </summary>
-		private static string Install(string folder, string master, GameLocation game) {
+		/// <param name="backUp">Whether the live archive is copied into backups\ before it is overwritten.</param>
+		private static string Install(string folder, string master, GameLocation game, bool backUp) {
 			string problem = "";
 			string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
 			try {
@@ -285,7 +291,7 @@ namespace TranslationTools {
 					CheckpointLog.Warning(folder, "Run", "moved the live " + Path.GetFileName(game.Script) + " aside (" + Path.GetFileName(scriptBackup) + ")");
 				}
 
-				if (File.Exists(game.Archive) == true) {
+				if (backUp == true && File.Exists(game.Archive) == true) {
 					string backup = Path.Combine(backups, Path.GetFileName(game.Archive) + ".live_" + stamp);
 					File.Copy(game.Archive, backup, false);
 					if (File.Exists(backup) == false) {

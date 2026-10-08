@@ -53,6 +53,7 @@ MyCheckpoint\
     checkpoint.info                 which game this is
     checkpoint.hashes               what the sources looked like at the last build
     checkpoint.choices              where every choice menu is in the split
+    checkpoint.stamps               which dialogue files were aligned, with what, and their hashes
 ```
 
 Nothing else may sit at the top of the folder. If something else is there, the tool calls
@@ -155,6 +156,9 @@ you can edit text without touching the script around it.
   the tool says how many it moved. Bare Japanese nametags, dialogue and narration are put
   in quotes, which the engine needs before it will show English in their place: a nametag
   becomes `【"name"】`, a spoken line becomes `"「...」"`, a narration line is quoted whole.
+  A line counts as prose when any Japanese character or Japanese punctuation sits outside
+  the quotes, wherever it is on the line, so a beat of silence written as `………r` comes
+  out as `"………"r` like any other narration.
   An `nl` or `r` sitting between Japanese characters is the engine's line break or wait,
   and stays outside the quotes: `"left"nl"right"`. A character the original already had in
   quotes to keep the engine from obeying it, such as `"-"`, is folded into the quoted line
@@ -225,7 +229,11 @@ since the last build, Build says so and skips the compile.
 ### Run - install the master into the game and start it
 
 Copies the master over the installed game's own script file and starts the game. The
-game's file is backed up into the checkpoint's `backups\` first, every time.
+Run row carries its own switch like Join and Build, Left or Right on the row, "back up
+the live archive first", off every time the menu opens: a build loop runs hundreds of
+times, and a backup is a choice you make, never a side effect. On NScripter a live
+`0.txt` is always moved aside into `backups\`, because the engine would load it instead
+of what was just installed.
 
 The first time, Run asks which installed game to use. If you have told it about one before
 for this engine, it offers that; otherwise it asks for the game's folder, and which program
@@ -311,6 +319,9 @@ opens to its facts and progress, with three choices:
 - **Walk the lines** starts the walk, or resumes it where it stopped. Every answer is
   written at once to `pairing.txt` in the pair folder, so closing the window loses
   nothing.
+- **Apply the alignment** is offered once the walk is complete: both files and their
+  code are renumbered so index n is the same line on both sides, with copies of both
+  as they were kept in the pair folder. Described under "The walk" below.
 - **Repair speaker tags from the alignment** is offered once the walk is complete: you
   name whose tags are the standard and the other side's tags are made to agree, pair by
   pair. Described under "The walk" below.
@@ -421,8 +432,32 @@ shown only under a debugger and marked TGD only, so the general walk can be test
 the debugger too. They are not part of the tool for other games.
 
 When one side runs out, every line left on the other is recorded as having no partner and
-the walk is complete. Apply, which renumbers both files from the pairing, is the next
-piece to be built.
+the walk is complete.
+
+**Apply.** Once a pair is complete, **Apply the alignment** on the pair's menu makes it
+permanent in the files. The pairing's entries are ordered so the reference side ascends,
+each editable-only line placed right after the entry that preceded it in the walk, and
+every entry gets one new index counted from zero: a pair's two lines share it, a line
+only one side has gets one nobody else has. Nothing moves. Every line keeps its place in
+the game's reading order and only its number changes, so afterwards index n is the same
+line on both sides, and on the editable side the numbers cross where the walk found a
+swap. Both sides' dialogue files are renumbered, and the code that carries their tokens
+with them: the function file of the same name on NScripter; on Siglus every region of
+every scene whose pointer comment names the key, since ids are scoped to their label.
+The choice blocks recorded for the key move to the new numbers too. Before a byte is
+written, both sides' files are copied into the pair folder under `before\<serial>\`,
+keeping their layout under the split folder; the reference is written like the editable,
+since alignment is a known change. Afterwards each checkpoint gets a block in its
+`checkpoint.stamps`: the key, the other side's serial and key, the time, and the content
+hashes of the dialogue and code files as written. Every later write the tool itself
+makes to a stamped dialogue file refreshes its hash, so the tool's own writes never look
+like outside edits; the gate that will read the stamps is not built yet. Apply refuses a
+file holding a line the pairing never decided, since that means the file changed after
+the walk, and a code token the dialogue file does not have, before anything is written.
+An applied pair is history: its record is rewritten to the new numbers so the speaker
+repair can still run over it, but Walk and Reset refuse, and realigning means deleting
+the pair and starting a new one. Resplitting a checkpoint replaces its files, stamps and
+all, as any split does.
 
 
 ## 8. The Checkpoints menu
@@ -702,5 +737,5 @@ warning and error the tool raised about that checkpoint is in it, newest at the 
 
 - The dialogue editor. Until it exists, edit the files under `split\dialogues\` with any
   text editor that saves Shift-JIS (code page 932) without a byte-order mark.
-- Alignment between two checkpoints of the same game, with the language model as a
-  second opinion on doubtful pairs.
+- The translation gate: reading the stamps to say whether an aligned file is still as
+  the tool wrote it and its partner still locked, before a translation pass may use it.

@@ -228,6 +228,7 @@ namespace TranslationTools {
 					+ "Left:      " + RemainingText(pair, pairing) + "\n");
 			});
 			menu.AddChoice(new ConsoleMenuItem("Walk the lines (resumes where it stopped)").SetActionOnSelect(() => { WalkPair(pair); }));
+			menu.AddChoice(new ConsoleMenuItem("Apply the alignment (once it is complete): renumber both files so index n is the same line on both sides...").SetActionOnSelect(() => { ApplyPair(pair); }));
 			menu.AddChoice(new ConsoleMenuItem("Repair speaker tags from the alignment (once it is complete): pick whose tags are the standard...").SetActionOnSelect(() => { RepairPair(pair); }));
 			menu.AddChoice(new ConsoleMenuItem("Reset progress: forget every pairing of this file").SetActionOnSelect(() => { ResetPair(pair); }));
 			menu.AddChoice(new ConsoleMenuItem("Back"));
@@ -286,6 +287,9 @@ namespace TranslationTools {
 			if (problem.Length == 0 && reference!.Writable == true) {
 				problem = "The reference \"" + reference.Label + "\" is not locked. Lock it, or start a new pair.";
 			}
+			if (problem.Length == 0 && AlignmentPairing.Load(pair.Folder).Status == AlignmentPairing.Applied) {
+				problem = "This alignment was applied: the files are renumbered and the walk's numbers no longer exist. Delete the pair and start a new one to realign.";
+			}
 			if (problem.Length == 0 && SyncGlossaries(edit!, reference!) == false) {
 				problem = "The two glossaries differ and neither was copied. The walk needs one glossary on both sides.";
 			}
@@ -295,6 +299,30 @@ namespace TranslationTools {
 			}
 			if (problem.Length == 0) {
 				AlignmentWalk.Run(pair, edit!, reference!);
+			}
+		}
+
+
+		/// <summary>
+		/// Resolves the pair's two checkpoints and hands them to Apply, which refuses on its
+		/// own until the alignment is complete, and once it has been applied.
+		/// </summary>
+		private static void ApplyPair(AlignmentPair pair) {
+			Checkpoint? reference = CheckpointList.FindBySerial(pair.CanonicalSerial);
+			Checkpoint? edit = CheckpointList.FindBySerial(pair.OtherSerial);
+			string problem = "";
+			if (reference == null) {
+				problem = "No checkpoint has the reference serial " + pair.CanonicalSerial + " any more.";
+			}
+			if (problem.Length == 0 && edit == null) {
+				problem = "No checkpoint has the editable serial " + pair.OtherSerial + " any more.";
+			}
+			if (problem.Length > 0) {
+				Console.WriteLine(problem);
+				ConsoleExt.WaitForEnter("continue");
+			}
+			if (problem.Length == 0) {
+				AlignmentApply.Run(pair, edit!, reference!);
 			}
 		}
 
@@ -332,9 +360,14 @@ namespace TranslationTools {
 		/// </summary>
 		private static void ResetPair(AlignmentPair pair) {
 			AlignmentPairing pairing = AlignmentPairing.Load(pair.Folder);
-			int forgotten = pairing.Entries.Count;
-			pairing.Reset();
-			Console.WriteLine("Progress reset: " + forgotten + " decision(s) forgotten. The next walk starts from the first line.");
+			if (pairing.Status == AlignmentPairing.Applied) {
+				Console.WriteLine("This alignment was applied; its record stays as the history of what was renumbered. Delete the pair and start a new one to realign.");
+			}
+			if (pairing.Status != AlignmentPairing.Applied) {
+				int forgotten = pairing.Entries.Count;
+				pairing.Reset();
+				Console.WriteLine("Progress reset: " + forgotten + " decision(s) forgotten. The next walk starts from the first line.");
+			}
 			ConsoleExt.WaitForEnter("continue");
 		}
 
