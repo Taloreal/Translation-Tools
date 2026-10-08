@@ -31,8 +31,14 @@
     <!-- The compiler installer ships beside the exe so the tool can run it on a fresh machine. -->
     <None Include="Scripts\Update-SiglusSsu.ps1" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Scripts\Update-SiglusSsu.bat" CopyToOutputDirectory="PreserveNewest" />
-    <!-- The bundled NScripter engine (ONScripter-EN, GPL) ships beside the exe, with its license. -->
-    <None Include="Tools\ONScripter\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- The bundled NScripter engine (ONScripter-EN, GPL) ships beside the exe, with its license.
+         It is a separate program the tool starts, so a single-file publish must leave it as loose
+         files: bundled into the exe it could neither be started nor seen with its license. -->
+    <None Include="Tools\ONScripter\**" CopyToOutputDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+    <!-- The compiler installer is run by PowerShell, so it stays loose as well. -->
+    <None Update="Scripts\Update-SiglusSsu.ps1" ExcludeFromSingleFile="true" />
+    <None Update="Scripts\Update-SiglusSsu.bat" ExcludeFromSingleFile="true" />
+    <None Update="MANUAL.md" ExcludeFromSingleFile="true" />
   </ItemGroup>
 
 </Project>
