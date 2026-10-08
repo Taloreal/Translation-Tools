@@ -49,14 +49,16 @@ namespace TranslationTools {
 
 
 		/// <summary>
-		/// Every dialogue key of a checkpoint's split, in no particular order; empty when
-		/// it has no split.
+		/// Every dialogue key of a checkpoint's split that holds text, in no particular
+		/// order; empty when it has no split. Only the top of dialogues\ is read: the files
+		/// the NScripter split puts under dialogues\empty\ hold no dialogue, and nothing in
+		/// them can be paired, learned or counted.
 		/// </summary>
 		public static List<string> DialogueKeys(Checkpoint checkpoint) {
 			List<string> keys = new();
 			string dialogues = Path.Combine(CheckpointInspector.FolderOf(checkpoint.Path), CheckpointInspector.SplitFolder, NScripterSplit.DialoguesFolder);
 			if (Directory.Exists(dialogues) == true) {
-				foreach (string file in Directory.GetFiles(dialogues, "*.txt")) {
+				foreach (string file in Directory.GetFiles(dialogues, "*.txt", SearchOption.TopDirectoryOnly)) {
 					keys.Add(Path.GetFileNameWithoutExtension(file));
 				}
 			}

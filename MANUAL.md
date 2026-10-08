@@ -136,7 +136,11 @@ Cuts the script into one file per section, with the dialogue separated from the 
 you can edit text without touching the script around it.
 
 - NScripter: `split\dialogues\` holds the lines, `split\functions\` holds the code, and two
-  key files list them in order. A choice menu in the engine's standard form, a `select`,
+  key files list them in order. Every function gets a dialogue file, since the join pairs
+  the two lists by position, but a function with no dialogue at all gets its file under
+  `split\dialogues\empty\`, so `dialogues\` itself is the list of files that need a
+  translator; the split reports the two counts, and the tool's own pickers and scans
+  never look inside `empty\`. A choice menu in the engine's standard form, a `select`,
   `selgosub`, `selnum` or `csel` command with its quoted options, is stamped with
   `;start choices` and `;end choices`, and each option line goes into the dialogue file
   with its `,*label` riding along so you can see it is a choice, and every option gets the

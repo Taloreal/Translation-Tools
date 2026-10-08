@@ -22,6 +22,15 @@ namespace TranslationTools {
 
 		public const string DialoguesFolder = "dialogues";
 		public const string FunctionsFolder = "functions";
+
+		/// <summary>
+		/// The subfolder of dialogues\ holding the dialogue files with no dialogue at all,
+		/// only their label line: dialogues\empty\label.txt. Every function gets a dialogue
+		/// file because the join pairs the two key lists by position, but a game can have far
+		/// more functions without text than with, and the folder keeps them out of the way
+		/// so dialogues\ itself is the list of files that need a translator.
+		/// </summary>
+		public const string EmptyFolder = "empty";
 		public const string DialogueKeyFile = "DialogueKey.txt";
 		public const string FunctionKeyFile = "FunctionKey.txt";
 		public const string PreambleFile = "Preamble.txt";
@@ -79,19 +88,31 @@ namespace TranslationTools {
 					List<string> dialogueKeys = new();
 					List<ChoiceLocation> choices = new();
 					int dialogueLines = 0;
+					int emptyFiles = 0;
 					foreach (List<string> function in functions) {
 						string label = LabelOf(function[0]);
 						string functionKey = Path.Combine(FunctionsFolder, label + ".txt");
 						string dialogueKey = Path.Combine(DialoguesFolder, label + ".txt");
+						int held = WriteFunction(function, label, Path.Combine(splitFolder, functionKey), Path.Combine(splitFolder, dialogueKey), choices);
+						dialogueLines += held;
+						if (held == 0) {
+							// Nothing to translate in it: the file stays, since the join pairs the
+							// key lists by position, but it goes into the empty\ subfolder.
+							string emptyKey = Path.Combine(DialoguesFolder, EmptyFolder, label + ".txt");
+							Directory.CreateDirectory(Path.Combine(splitFolder, DialoguesFolder, EmptyFolder));
+							File.Move(Path.Combine(splitFolder, dialogueKey), Path.Combine(splitFolder, emptyKey), true);
+							dialogueKey = emptyKey;
+							emptyFiles++;
+						}
 						functionKeys.Add(functionKey);
 						dialogueKeys.Add(dialogueKey);
-						dialogueLines += WriteFunction(function, label, Path.Combine(splitFolder, functionKey), Path.Combine(splitFolder, dialogueKey), choices);
 					}
 					File.WriteAllLines(Path.Combine(splitFolder, FunctionKeyFile), functionKeys);
 					File.WriteAllLines(Path.Combine(splitFolder, DialogueKeyFile), dialogueKeys);
 					string checkpointFolder = Path.GetDirectoryName(Path.GetFullPath(splitFolder)) ?? splitFolder;
 					ChoiceLocations.Write(checkpointFolder, choices);
 					onLine("Split " + functions.Count + " functions, " + dialogueLines + " dialogue lines, " + preamble.Count + " preamble lines.");
+					onLine((functions.Count - emptyFiles) + " dialogue file(s) hold text; " + emptyFiles + " hold none and sit in " + DialoguesFolder + "\\" + EmptyFolder + "\\.");
 					onLine(choices.Count + " choice block(s); where they are is in " + ChoiceLocations.FileName + ".");
 				}
 				catch (Exception exception) {
