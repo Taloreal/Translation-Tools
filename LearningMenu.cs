@@ -74,6 +74,8 @@ namespace TranslationTools {
 				menu.AddChoice(new ConsoleMenuItem("Fetch the cast from VNDB: names, roles and descriptions into the glossary (needs the game's VNDB id)...").SetActionOnSelect(() => { FetchCast(checkpoint, folder); }));
 				menu.AddChoice(new ConsoleMenuItem("Learn the speaker tag from one of this checkpoint's dialogue files...").SetActionOnSelect(() => { TeachFromFile(checkpoint, folder); }));
 				menu.AddChoice(new ConsoleMenuItem("Learn the names: scan every dialogue file for speakers the glossary does not know...").SetActionOnSelect(() => { LearnNames(checkpoint, folder); }));
+				menu.AddChoice(new ConsoleMenuItem("Learn standalone name lines: a name on its own line above the text, found by repetition and the model...").SetActionOnSelect(() => { LearnLineNames(checkpoint, folder); }));
+				menu.AddChoice(new ConsoleMenuItem("Settings: lines considered before stopping, stop share...").SetActionOnSelect(LearningSettingsMenu));
 				menu.AddChoice(new ConsoleMenuItem("Copy the speaker tag to another checkpoint of the same game...").SetActionOnSelect(() => { CopyTagTo(checkpoint, folder); }));
 				menu.AddChoice(new ConsoleMenuItem("Take the speaker tag from another checkpoint of the same game...").SetActionOnSelect(() => { TakeTagFrom(checkpoint, folder); }));
 				menu.AddChoice(new ConsoleMenuItem("Forget the speaker tag: lines count as untagged again").SetActionOnSelect(() => { ForgetTag(folder); }));
@@ -326,6 +328,260 @@ namespace TranslationTools {
 				notes.Add("\"" + form + "\" is shared by " + string.Join(" and ", who) + "; dropped from all of them");
 			}
 			return notes;
+		}
+
+
+		/// <summary>
+		/// The standalone learner's walk over the repeated lines, most frequent first, kept
+		/// pure so it can be probed without a model: isName answers for one line, the lines
+		/// considered and the names among them are counted, and the walk stops once the
+		/// minimum has been considered and the share of names has fallen under the bar.
+		/// </summary>
+		/// <param name="byFrequency">The repeated lines with their counts, most frequent first.</param>
+		/// <param name="isName">Says whether one line is a name.</param>
+		/// <param name="minimum">How many lines are considered before the stop rule may end the walk.</param>
+		/// <param name="stopPercent">The share of names, in percent, under which the walk stops.</param>
+		/// <param name="considered">How many lines were looked at.</param>
+		/// <param name="names">How many of those were names.</param>
+		/// <param name="stoppedBecause">Why the walk ended, one phrase.</param>
+		/// <returns>The lines judged names, in frequency order.</returns>
+		public static List<KeyValuePair<string, int>> WalkRepeatedLines(List<KeyValuePair<string, int>> byFrequency, Func<string, bool> isName,
+			int minimum, int stopPercent, out int considered, out int names, out string stoppedBecause) {
+			considered = 0;
+			names = 0;
+			stoppedBecause = "the list ran out";
+			List<KeyValuePair<string, int>> found = new();
+			bool going = true;
+			int at = 0;
+			while (going == true && at < byFrequency.Count) {
+				if (considered >= minimum && names * 100 < stopPercent * considered) {
+					going = false;
+					stoppedBecause = "after " + considered + " lines the share of names fell under " + stopPercent + "%";
+				}
+				if (going == true) {
+					KeyValuePair<string, int> item = byFrequency[at];
+					considered++;
+					if (isName(item.Key) == true) {
+						names++;
+						found.Add(item);
+					}
+					at++;
+				}
+			}
+			return found;
+		}
+
+
+		/// <summary>
+		/// Says whether a repeated line is a character's name: the glossary answers without a
+		/// call, the model answers the rest one line per call, and two failed calls in a row
+		/// leave the model alone for the rest of the walk.
+		/// </summary>
+		private class LineJudge {
+
+			public List<CharacterEntry> Cast = new();
+			public int Known = 0;
+			public int Asked = 0;
+			public bool ModelGone = false;
+
+			private int failuresInARow = 0;
+
+
+			public bool IsName(string line) {
+				bool name = false;
+				bool known = Glossary.Find(Cast, line) != null;
+				if (known == true) {
+					Known++;
+					name = true;
+				}
+				if (known == false && ModelGone == false) {
+					Asked++;
+					Console.WriteLine("Asking the model whether \"" + AlignmentLines.Preview(line, 60) + "\" is a name (" + Asked + ") ...");
+					string reply = LlmClient.Complete(
+						"You are given one line of text from a visual-novel script, as it was written. "
+						+ "Reply YES if the line is nothing but a character's name - the name a game shows above the text box to say who is speaking - "
+						+ "or NO if it is speech, narration, a sound, punctuation or anything else. One word on the first line.",
+						"Line: " + line, out string error, 0, 0);
+					if (error.Length > 0) {
+						failuresInARow++;
+						if (failuresInARow >= 2) {
+							ModelGone = true;
+							Console.WriteLine("Two failed answers in a row; the model is not asked for the rest of the walk.");
+						}
+					}
+					if (error.Length == 0) {
+						failuresInARow = 0;
+						name = reply.Trim().ToUpperInvariant().StartsWith("YES");
+					}
+				}
+				return name;
+			}
+		}
+
+
+		/// <summary>
+		/// The standalone name-line learner: counts every dialogue line byte for byte across
+		/// the files, walks the repeated ones from the most frequent down with the glossary
+		/// and the model saying which are names, stops where the names run out, and presents
+		/// the ones the glossary lacks to settle one at a time. Once names were added, offers
+		/// to make "a name on its own line" the checkpoint's speaker tag, and conforms the
+		/// files so every name line carries its marker.
+		/// </summary>
+		private static void LearnLineNames(Checkpoint checkpoint, string folder) {
+			Dictionary<string, int> counts = new(StringComparer.Ordinal);
+			Dictionary<string, HashSet<string>> files = new(StringComparer.Ordinal);
+			Dictionary<string, List<string>> following = new(StringComparer.Ordinal);
+			List<string> keys = AlignmentLines.DialogueKeys(checkpoint);
+			keys.Sort(string.CompareOrdinal);
+			Console.WriteLine("Counting every line of " + keys.Count + " dialogue file(s) ...");
+			foreach (string key in keys) {
+				string previous = "";
+				foreach (string text in AlignmentLines.ReadTexts(AlignmentLines.DialoguePath(checkpoint, key))) {
+					string line = NametagConvention.StripMarker(text).Trim();
+					if (line.Length > 0) {
+						if (counts.ContainsKey(line) == false) {
+							counts[line] = 0;
+							files[line] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+							following[line] = new List<string>();
+						}
+						counts[line]++;
+						files[line].Add(key);
+						if (previous.Length > 0 && following[previous].Count < SampleLines) {
+							following[previous].Add(line);
+						}
+						previous = line;
+					}
+				}
+			}
+			List<KeyValuePair<string, int>> repeated = new();
+			foreach (KeyValuePair<string, int> item in counts) {
+				if (item.Value >= 2) {
+					repeated.Add(item);
+				}
+			}
+			repeated.Sort((first, second) => {
+				int order = second.Value.CompareTo(first.Value);
+				if (order == 0) {
+					order = string.CompareOrdinal(first.Key, second.Key);
+				}
+				return order;
+			});
+			if (repeated.Count == 0) {
+				Console.WriteLine("No line repeats anywhere in the files; there is nothing a standalone name could be.");
+				ConsoleExt.WaitForEnter("continue");
+			}
+			if (repeated.Count > 0) {
+				LineJudge judge = new();
+				judge.Cast = Glossary.Characters(folder);
+				judge.ModelGone = AlignmentHints.GaveUp;
+				List<KeyValuePair<string, int>> found = WalkRepeatedLines(repeated, judge.IsName, LearningSettings.MinimumLines, LearningSettings.StopPercent,
+					out int considered, out int names, out string why);
+				Console.WriteLine(repeated.Count + " line(s) repeat; " + considered + " considered, " + names + " name(s) among them (" + judge.Known + " already in the glossary); stopped: " + why + ".");
+				if (judge.ModelGone == true) {
+					Console.WriteLine("The model could not be asked, so only glossary names counted; the list is not a verdict on the rest.");
+				}
+				List<KeyValuePair<string, int>> candidates = new();
+				foreach (KeyValuePair<string, int> item in found) {
+					if (Glossary.Find(judge.Cast, item.Key) == null) {
+						candidates.Add(item);
+					}
+				}
+				int before = judge.Cast.Count;
+				bool browsing = candidates.Count > 0;
+				if (candidates.Count == 0) {
+					ConsoleExt.WaitForEnter("continue");
+				}
+				while (browsing == true) {
+					List<CharacterEntry> cast = Glossary.Characters(folder);
+					List<string> rows = new();
+					foreach (KeyValuePair<string, int> item in candidates) {
+						rows.Add(item.Key + "   " + item.Value + " line(s) in " + files[item.Key].Count + " file(s)");
+					}
+					int picked = PagedPicker.Pick(rows, "Name lines the glossary does not know (" + candidates.Count + ") - pick one to settle it");
+					if (picked < 0) {
+						browsing = false;
+					}
+					if (picked >= 0) {
+						SpokenName spoken = new();
+						spoken.Name = candidates[picked].Key;
+						spoken.Lines = candidates[picked].Value;
+						spoken.Files = files[spoken.Name];
+						spoken.Samples = following[spoken.Name];
+						spoken.Spellings[spoken.Name] = spoken.Lines;
+						SettleName(checkpoint, spoken, cast);
+						if (Glossary.Find(Glossary.Characters(folder), spoken.Name) != null) {
+							candidates.RemoveAt(picked);
+						}
+						if (candidates.Count == 0) {
+							browsing = false;
+						}
+					}
+				}
+				List<CharacterEntry> after = Glossary.Characters(folder);
+				CheckpointInfo info = CheckpointInfo.Load(folder);
+				bool alreadyLine = string.Equals(info.SpeakerTag, NametagConvention.LineKind, StringComparison.Ordinal);
+				if (after.Count > before && alreadyLine == false) {
+					bool adopt = YesNoMenu.Ask("Read a name on its own line as " + checkpoint.Label + "'s speaker tag from here on?",
+						"The line above a text line is its speaker when it is one of the glossary's names. Every such line gets " + NametagConvention.LineMarker.Trim() + " after it so a translator sees it.", true);
+					if (adopt == true) {
+						info.SpeakerTag = NametagConvention.LineKind;
+						string problem = info.Save(folder);
+						if (problem.Length > 0) {
+							Console.WriteLine(problem);
+						}
+						if (problem.Length == 0) {
+							MarkNameLines(checkpoint, folder, after);
+						}
+						ConsoleExt.WaitForEnter("continue");
+					}
+				}
+				if (after.Count > before && alreadyLine == true) {
+					MarkNameLines(checkpoint, folder, after);
+					ConsoleExt.WaitForEnter("continue");
+				}
+			}
+		}
+
+
+		/// <summary>
+		/// Conforms every character once, so each standalone name line carries the written
+		/// name and its marker. The counts are summed and printed.
+		/// </summary>
+		private static void MarkNameLines(Checkpoint checkpoint, string folder, List<CharacterEntry> cast) {
+			int marked = 0;
+			foreach (CharacterEntry entry in cast) {
+				string problem = NametagConform.SaveAndConform(checkpoint, entry, entry.Written, out string report);
+				if (problem.Length > 0) {
+					Console.WriteLine(entry.Written + ": " + problem);
+				}
+				if (problem.Length == 0 && report.StartsWith("Every") == false && report.StartsWith("No files") == false) {
+					marked++;
+				}
+			}
+			Console.WriteLine("Name lines conformed for " + cast.Count + " character(s); " + marked + " of them had lines to rewrite or mark.");
+		}
+
+
+		/// <summary>
+		/// The two numbers the standalone learner stops on.
+		/// </summary>
+		private static void LearningSettingsMenu() {
+			ConsoleMenuItem minimum = new("");
+			ConsoleMenuItem percent = new("");
+			ConsoleSelectMenu menu = new(loops: true, numbered: false, clearOnRefresh: true);
+			menu.AddOnDrawMenuAction((shown) => {
+				minimum.SetText("Lines considered before the stop rule may end the walk: " + LearningSettings.MinimumLines);
+				percent.SetText("Stop once the share of names is under (percent): " + LearningSettings.StopPercent);
+				shown.SetPreChoiceText("-- Learning settings --\n");
+			});
+			menu.AddChoice(minimum.SetActionOnSelect(() => {
+				LlmMenu.SetWholeNumber("Lines considered before stopping", LearningSettings.MinimumLines, 1, LearningSettings.Most, (value) => { LearningSettings.MinimumLines = value; });
+			}));
+			menu.AddChoice(percent.SetActionOnSelect(() => {
+				LlmMenu.SetWholeNumber("Stop share (percent)", LearningSettings.StopPercent, 1, 100, (value) => { LearningSettings.StopPercent = value; });
+			}));
+			menu.AddChoice(new ConsoleMenuItem("Back"));
+			menu.GetChoice();
 		}
 
 

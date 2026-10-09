@@ -14,6 +14,7 @@ namespace TranslationTools {
 		private static readonly ConsoleMenuItem ServiceItem = new("Build-mode service address");
 		private static readonly ConsoleMenuItem RootItem = new("Checkpoints folder");
 		private static readonly ConsoleMenuItem TgdItem = new("");
+		private static readonly ConsoleMenuItem GrainItem = new("");
 
 
 		/// <summary>
@@ -27,11 +28,20 @@ namespace TranslationTools {
 			menu.AddChoice(ServiceItem.SetActionOnSelect(SetServiceAddress));
 			menu.AddChoice(new ConsoleMenuItem("Game installs...").SetActionOnSelect(GameInstallsMenu.Show));
 			menu.AddChoice(new ConsoleMenuItem("Language model...").SetActionOnSelect(LlmMenu.Show));
+			menu.AddChoice(GrainItem.SetActionOnSelect(ToggleGrain));
 			if (TgdFeatures.Available == true) {
 				menu.AddChoice(TgdItem.SetActionOnSelect(ToggleTgd));
 			}
 			menu.AddChoice(new ConsoleMenuItem("Back"));
+			// A switch row flips on Left or Right as well as Enter, and its text says so
+			// with the arrows, the same as the Operations rows.
+			ReportingItem.AddOnKeyPressAction(FlipReporting);
+			GrainItem.AddOnKeyPressAction(FlipGrain);
+			TgdItem.AddOnKeyPressAction(FlipTgd);
 			menu.GetChoice();
+			ReportingItem.RemoveOnKeyPressAction(FlipReporting);
+			GrainItem.RemoveOnKeyPressAction(FlipGrain);
+			TgdItem.RemoveOnKeyPressAction(FlipTgd);
 		}
 
 
@@ -50,15 +60,48 @@ namespace TranslationTools {
 			if (root.Length == 0) {
 				root = "not set (asked when first needed)";
 			}
-			RootItem.SetText("Checkpoints folder (new checkpoints go in <folder>\\<label>): " + root);
-			ReportingItem.SetText("Send build-mode reports: " + reporting);
-			ServiceItem.SetText("Build-mode service address: " + BuildModeService.AddressForDisplay);
+			RootItem.SetText("Checkpoints folder: " + root);
+			ReportingItem.SetText("Build-mode reports: <- " + reporting + " ->");
+			ServiceItem.SetText("Service address: " + BuildModeService.AddressForDisplay);
 			string tgd = "off";
 			if (TgdFeatures.Wanted == true) {
 				tgd = "on";
 			}
-			TgdItem.SetText(TgdFeatures.Label + ": TGD anchors in alignment (nametag, voice, nametag check): " + tgd);
+			TgdItem.SetText(TgdFeatures.Label + " alignment anchors: <- " + tgd + " ->");
+			GrainItem.SetText("Split grain: <- " + SplitGrain.Describe() + " ->");
 			menu.SetPreChoiceText("-- Settings --\n");
+		}
+
+
+		/// <summary>
+		/// Flips the split grain between one file per function and the whole script.
+		/// </summary>
+		private static void ToggleGrain() {
+			SplitGrain.WholeScript = SplitGrain.WholeScript == false;
+		}
+
+
+		/// <summary>Left or Right on the grain row flips it, like Enter.</summary>
+		private static void FlipGrain(ConsoleMenuItem? item, ConsoleKeyInfo key) {
+			if (OperationsMenu.IsSideways(key) == true) {
+				ToggleGrain();
+			}
+		}
+
+
+		/// <summary>Left or Right on the TGD row flips it, like Enter.</summary>
+		private static void FlipTgd(ConsoleMenuItem? item, ConsoleKeyInfo key) {
+			if (OperationsMenu.IsSideways(key) == true) {
+				ToggleTgd();
+			}
+		}
+
+
+		/// <summary>Left or Right on the reports row flips it, like Enter.</summary>
+		private static void FlipReporting(ConsoleMenuItem? item, ConsoleKeyInfo key) {
+			if (OperationsMenu.IsSideways(key) == true) {
+				BuildModeService.ReportingAllowed = BuildModeService.ReportingAllowed == false;
+			}
 		}
 
 
@@ -74,7 +117,7 @@ namespace TranslationTools {
 		/// Turns reporting on or off, explaining what a report contains the first time.
 		/// </summary>
 		private static void ToggleReporting() {
-			AskReporting();
+			BuildModeService.ReportingAllowed = BuildModeService.ReportingAllowed == false;
 		}
 
 
@@ -91,14 +134,12 @@ namespace TranslationTools {
 		}
 
 
+		/// <summary>
+		/// The one-time question before the first report an operation wants to send. What a
+		/// report holds is in the manual, not here: the tool is not its own manual.
+		/// </summary>
 		private static void AskReporting() {
-			string context = "";
-			if (BuildModeService.ReportingAsked == false) {
-				context = "A report tells the build-mode service which build mode worked for an archive:\n"
-					+ "the archive's fingerprint, hashes of its slices, its size, the game name you gave\n"
-					+ "it, the mode, and the compiler version. Nothing about you or your machine is sent.";
-			}
-			bool allow = YesNoMenu.Ask("Send build-mode reports?", context);
+			bool allow = YesNoMenu.Ask("Send build-mode reports? (what a report holds: MANUAL.md, Settings)");
 			BuildModeService.ReportingAllowed = allow;
 		}
 

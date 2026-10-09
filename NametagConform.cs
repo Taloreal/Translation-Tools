@@ -128,7 +128,15 @@ namespace TranslationTools {
 			if (NScripterSplit.TryReadPointer(line, out string pointer, out int index, out string rest) == true) {
 				if (convention.Matches(rest, out string name) == true && (entry.Has(name) == true || CharacterEntry.Contains(retired, name) == true)) {
 					bool differs = string.Equals(name, entry.Written, StringComparison.Ordinal) == false;
-					if (differs == true) {
+					if (convention.Standalone == true) {
+						// The whole line is the tag: it becomes the written name plus the marker
+						// that tells a translator what it is, marker added where it was missing.
+						bool unmarked = rest.TrimEnd().EndsWith(NametagConvention.LineMarker.Trim(), StringComparison.Ordinal) == false;
+						if (differs == true || unmarked == true) {
+							result = pointer + entry.Written + NametagConvention.LineMarker;
+						}
+					}
+					if (convention.Standalone == false && differs == true) {
 						int open = rest.IndexOf(convention.Opener);
 						int close = rest.IndexOf(convention.Closer, open + 1);
 						string inner = rest.Substring(open + 1, close - open - 1);
@@ -165,32 +173,59 @@ namespace TranslationTools {
 			string problem = "";
 			bool quoteNames = CheckpointInspector.Inspect(checkpoint.Path).Engine == CheckpointEngine.Siglus;
 			string path = AlignmentLines.DialoguePath(checkpoint, key);
+			// Under the standalone kind the tag is a line of its own: the line to rewrite is
+			// the tag line, whether this line is it or is the one it names. A tag line can be
+			// renamed but not removed or added here, since that would delete or insert a line.
+			int target = line.Index;
+			if (convention.Standalone == true) {
+				target = line.TagIndex;
+				if (line.IsTagLine == true) {
+					target = line.Index;
+				}
+				if (newName.Length == 0) {
+					problem = "Line " + line.Index + ": a standalone name line cannot be removed by a repair; delete it in the file if it is wrong.";
+				}
+				if (problem.Length == 0 && target < 0) {
+					problem = "Line " + line.Index + " has no name line above it; adding one would mean inserting a line, which a repair does not do.";
+				}
+			}
 			try {
-				string text = SiglusScript.ScriptEncoding.GetString(File.ReadAllBytes(path));
+				string text = "";
+				if (problem.Length == 0) {
+					text = SiglusScript.ScriptEncoding.GetString(File.ReadAllBytes(path));
+				}
 				string[] raw = text.Split('\n');
 				bool found = false;
-				for (int at = 0; at < raw.Length; at++) {
+				for (int at = 0; at < raw.Length && problem.Length == 0; at++) {
 					string whole = raw[at];
 					string ending = "";
 					if (whole.EndsWith("\r") == true) {
 						ending = "\r";
 						whole = whole.Substring(0, whole.Length - 1);
 					}
-					if (found == false && NScripterSplit.TryReadPointer(whole, out string pointer, out int index, out string rest) == true && index == line.Index) {
+					if (found == false && NScripterSplit.TryReadPointer(whole, out string pointer, out int index, out string rest) == true && index == target) {
 						found = true;
 						string newRest = RetagRest(rest, convention, newName, quoteNames);
 						raw[at] = pointer + newRest + ending;
-						line.Text = newRest;
-						line.HasNametag = convention.Matches(newRest, out string name);
-						line.Name = "";
-						if (line.HasNametag == true) {
-							line.Name = name;
+						if (convention.Standalone == true) {
+							line.Name = newName;
+							if (line.IsTagLine == true) {
+								line.Text = newRest;
+							}
 						}
-						line.Bare = AlignmentLines.BareText(newRest, convention);
+						if (convention.Standalone == false) {
+							line.Text = newRest;
+							line.HasNametag = convention.Matches(newRest, out string name);
+							line.Name = "";
+							if (line.HasNametag == true) {
+								line.Name = name;
+							}
+							line.Bare = AlignmentLines.BareText(newRest, convention);
+						}
 					}
 				}
-				if (found == false) {
-					problem = "Line " + line.Index + " was not found in " + Path.GetFileName(path) + ".";
+				if (problem.Length == 0 && found == false) {
+					problem = "Line " + target + " was not found in " + Path.GetFileName(path) + ".";
 				}
 				if (found == true) {
 					File.WriteAllBytes(path, SiglusScript.ScriptEncoding.GetBytes(string.Join("\n", raw)));
@@ -214,8 +249,18 @@ namespace TranslationTools {
 			if (quoteNames == true && newName.Length > 0) {
 				quoted = "\"" + newName + "\"";
 			}
-			bool tagged = convention.Matches(rest, out string name);
-			if (tagged == false && newName.Length > 0) {
+			if (convention.Standalone == true) {
+				// A tag line is nothing but the name: the whole line is replaced, marker and all.
+				if (newName.Length > 0) {
+					result = newName + NametagConvention.LineMarker;
+				}
+			}
+			string name = "";
+			bool tagged = false;
+			if (convention.Standalone == false) {
+				tagged = convention.Matches(rest, out name);
+			}
+			if (convention.Standalone == false && tagged == false && newName.Length > 0) {
 				result = convention.Opener + quoted + convention.Closer + rest;
 			}
 			if (tagged == true) {

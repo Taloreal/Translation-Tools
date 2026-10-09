@@ -165,14 +165,15 @@ namespace TranslationTools {
 				List<string> warnings = new();
 				onLine("Splitting the scenes...");
 				CheckpointWatch.Ignoring = true;
-				problem = SiglusSplit.SplitFolder(extract, split, Glossary.Characters(folder), warnings, onLine);
+				problem = SiglusSplit.SplitFolder(extract, split, Glossary.Characters(folder), warnings, onLine, SplitGrain.WholeScript);
 				CheckpointWatch.Ignoring = false;
 				foreach (string warning in warnings) {
 					onLine("Warning: " + warning);
 					CheckpointLog.Warning(folder, "Split", warning);
 				}
 				if (problem.Length == 0) {
-					CheckpointLog.Warning(folder, "Split", "split the scenes into split\\");
+					CheckpointLog.Warning(folder, "Split", "split the scenes into split\\ (" + SplitGrain.Describe() + ")");
+					RecordGrain(folder);
 				}
 			}
 
@@ -181,13 +182,28 @@ namespace TranslationTools {
 				string split = Path.Combine(folder, CheckpointInspector.SplitFolder);
 				onLine("Splitting " + NScriptArchive.ScriptName + "...");
 				CheckpointWatch.Ignoring = true;
-				problem = NScripterSplit.Split(script, split, onLine);
+				problem = NScripterSplit.Split(script, split, onLine, SplitGrain.WholeScript);
 				CheckpointWatch.Ignoring = false;
 				if (problem.Length == 0) {
-					CheckpointLog.Warning(folder, "Split", "split " + NScriptArchive.ScriptName + " into split\\");
+					CheckpointLog.Warning(folder, "Split", "split " + NScriptArchive.ScriptName + " into split\\ (" + SplitGrain.Describe() + ")");
+					RecordGrain(folder);
 				}
 			}
 			return problem;
+		}
+
+
+		/// <summary>
+		/// Writes the grain the split was cut at into the checkpoint's info, so a later look
+		/// says how it was cut.
+		/// </summary>
+		private static void RecordGrain(string folder) {
+			CheckpointInfo info = CheckpointInfo.Load(folder);
+			info.SplitMode = SplitGrain.Word;
+			string problem = info.Save(folder);
+			if (problem.Length > 0) {
+				CheckpointLog.Warning(folder, "Split", "could not record the split grain: " + problem);
+			}
 		}
 	}
 }

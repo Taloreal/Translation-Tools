@@ -122,7 +122,8 @@ namespace TranslationTools {
 		}
 
 
-		private static bool IsSideways(ConsoleKeyInfo key) {
+		/// <summary>Whether a key is Left or Right: the two keys that flip a row's own switch, on any menu.</summary>
+		public static bool IsSideways(ConsoleKeyInfo key) {
 			return key.Key == ConsoleKey.LeftArrow || key.Key == ConsoleKey.RightArrow;
 		}
 

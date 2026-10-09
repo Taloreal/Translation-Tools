@@ -293,7 +293,8 @@ namespace TranslationTools {
 						output.Warnings.Add(fileKey + SiglusScript.DialogueExtension + " holds " + SiglusScript.TokenFor(id) + " more than once; keeping the first.");
 					}
 					if (entries.ContainsKey(id) == false) {
-						entries.Add(id, line.Content.Substring(SiglusScript.TokenLength));
+						// A standalone name line's marker is for the translator; it never reaches the script.
+						entries.Add(id, NametagConvention.StripMarker(line.Content.Substring(SiglusScript.TokenLength)));
 					}
 				}
 			}

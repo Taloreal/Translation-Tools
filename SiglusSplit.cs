@@ -80,7 +80,8 @@ namespace TranslationTools {
 		/// <param name="warnings">Everything worth telling the user that did not stop the split.</param>
 		/// <param name="onLine">Receives progress.</param>
 		/// <returns>Empty on success, otherwise a plain sentence.</returns>
-		public static string SplitFolder(string sourceFolder, string splitFolder, List<CharacterEntry> characters, List<string> warnings, Action<string> onLine) {
+		/// <param name="wholeScene">True gives every text-bearing label of a scene one shared dialogue file named after the scene; false, one per label.</param>
+		public static string SplitFolder(string sourceFolder, string splitFolder, List<CharacterEntry> characters, List<string> warnings, Action<string> onLine, bool wholeScene) {
 			string problem = "";
 			if (Directory.Exists(sourceFolder) == false) {
 				problem = "Nothing to split: " + sourceFolder + " is missing.";
@@ -107,7 +108,7 @@ namespace TranslationTools {
 			while (problem.Length == 0 && at < scenes.Length) {
 				string name = Path.GetFileName(scenes[at]);
 				try {
-					SceneSplit split = SplitScene(SiglusScript.ReadScript(scenes[at]), name, versions, characters);
+					SceneSplit split = SplitScene(SiglusScript.ReadScript(scenes[at]), name, versions, characters, wholeScene);
 					splits.Add(split);
 					names.Add(name);
 					allChoices.AddRange(split.Choices);
@@ -170,7 +171,8 @@ namespace TranslationTools {
 		/// <param name="versions">Label name to the versions seen so far, across the run.</param>
 		/// <param name="characters">Glossary characters whose quoted Japanese name is replaced by the English one.</param>
 		/// <returns>The working copy and the dialogue files it points at.</returns>
-		public static SceneSplit SplitScene(string scriptText, string sceneName, Dictionary<string, List<LabelVersion>> versions, List<CharacterEntry> characters) {
+		/// <param name="wholeScene">True puts every text-bearing label's lines into one dialogue file named after the scene, ids running on across labels; false, one file per label with the version rule.</param>
+		public static SceneSplit SplitScene(string scriptText, string sceneName, Dictionary<string, List<LabelVersion>> versions, List<CharacterEntry> characters, bool wholeScene) {
 			SceneSplit output = new();
 			List<ScriptLine> lines = SeparateVoiceCalls(SiglusScript.ReadLines(scriptText), output.Warnings, out int separated);
 			if (separated > 0) {
@@ -198,13 +200,31 @@ namespace TranslationTools {
 			List<bool> textFlags = SiglusScript.ClassifyLines(lines);
 			HashSet<string> textBearing = FindTextBearingLabels(lines, textFlags);
 			Dictionary<string, string> regions = CollectRegions(lines, textBearing, out List<string> labelOrder);
-			Dictionary<string, string> keys = ResolveFileKeys(regions, labelOrder, sceneName, versions, output);
+			Dictionary<string, string> keys = new(StringComparer.Ordinal);
+			if (wholeScene == false) {
+				keys = ResolveFileKeys(regions, labelOrder, sceneName, versions, output);
+			}
+			if (wholeScene == true) {
+				// One file for the scene: every text-bearing label points at it, and the
+				// version rule has nothing to decide, since the scene's name is its own.
+				string sceneKey = Path.GetFileNameWithoutExtension(sceneName);
+				foreach (string label in labelOrder) {
+					keys[label] = sceneKey;
+				}
+				if (labelOrder.Count > 0) {
+					output.OwnedKeys.Add(sceneKey);
+				}
+			}
 
 			Dictionary<string, StringBuilder> bodies = new(StringComparer.Ordinal);
 			Dictionary<string, int> nextId = new(StringComparer.Ordinal);
 			HashSet<string> seenLabels = new(StringComparer.Ordinal);
 			List<ScriptLine> rewritten = new();
 			string current = "";
+			// The bodies and the ids are kept by FILE KEY, not by label: in a whole-scene
+			// split every label shares one file and its ids run on; per label the key is
+			// the label's own, or its version, which is unique within the scene either way.
+			string currentKey = "";
 			int at = -1;
 			ChoiceLocation? block = null;
 			foreach (ScriptLine line in lines) {
@@ -240,9 +260,10 @@ namespace TranslationTools {
 					// The pointer goes under EVERY occurrence of the label, so a repeated
 					// label switches the join back to the right dialogue file.
 					if (textBearing.Contains(label) == true) {
-						StartLabelBody(label, bodies, nextId);
+						currentKey = keys[label];
+						StartLabelBody(currentKey, bodies, nextId);
 						ScriptLine pointer = new();
-						pointer.Content = SiglusScript.PointerFor(keys[label]);
+						pointer.Content = SiglusScript.PointerFor(currentKey);
 						pointer.Ending = line.Ending;
 						if (pointer.Ending.Length == 0) {
 							pointer.Ending = SiglusScript.FallbackBreak;
@@ -260,19 +281,19 @@ namespace TranslationTools {
 						string body = line.Content.Substring(indent.Length);
 						string run = SiglusScript.PeelTail(body);
 						string tail = body.Substring(run.Length);
-						int id = nextId[current];
-						nextId[current] = id + 1;
+						int id = nextId[currentKey];
+						nextId[currentKey] = id + 1;
 						if (block != null) {
-							block.FileKey = keys[current];
+							block.FileKey = currentKey;
 							if (block.Options == 0) {
 								block.FirstIndex = id;
 							}
 							block.LastIndex = id;
 							block.Options += QuoteCount(run) / 2;
 						}
-						bodies[current].Append(SiglusScript.EntryBreak);
-						bodies[current].Append(SiglusScript.TokenFor(id));
-						bodies[current].Append(run);
+						bodies[currentKey].Append(SiglusScript.EntryBreak);
+						bodies[currentKey].Append(SiglusScript.TokenFor(id));
+						bodies[currentKey].Append(run);
 						output.TextLines += 1;
 						if (SiglusScript.HasCommaOutsideQuotes(line.Content) == true) {
 							output.ArgumentLists += 1;
@@ -287,8 +308,8 @@ namespace TranslationTools {
 				}
 			}
 
-			foreach (string label in bodies.Keys) {
-				output.Dialogues[keys[label]] = bodies[label].ToString();
+			foreach (string fileKey in bodies.Keys) {
+				output.Dialogues[fileKey] = bodies[fileKey].ToString();
 			}
 			output.Script = SiglusScript.WriteLines(rewritten);
 			return output;

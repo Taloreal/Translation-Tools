@@ -31,6 +31,9 @@ namespace TranslationTools {
 		/// so dialogues\ itself is the list of files that need a translator.
 		/// </summary>
 		public const string EmptyFolder = "empty";
+
+		/// <summary>The one dialogue key a whole-script split uses: dialogues\script.txt and functions\script.txt.</summary>
+		public const string WholeKey = "script";
 		public const string DialogueKeyFile = "DialogueKey.txt";
 		public const string FunctionKeyFile = "FunctionKey.txt";
 		public const string PreambleFile = "Preamble.txt";
@@ -66,7 +69,8 @@ namespace TranslationTools {
 		/// <param name="splitFolder">Where the split goes; created here.</param>
 		/// <param name="onLine">Receives progress.</param>
 		/// <returns>Empty on success, otherwise a plain sentence.</returns>
-		public static string Split(string scriptPath, string splitFolder, Action<string> onLine) {
+		/// <param name="wholeScript">True cuts the whole script into one function file and one dialogue file, keyed "script"; false, one pair per function.</param>
+		public static string Split(string scriptPath, string splitFolder, Action<string> onLine, bool wholeScript) {
 			string problem = "";
 			if (File.Exists(scriptPath) == false) {
 				problem = "Nothing to split: " + scriptPath + " is missing.";
@@ -81,6 +85,20 @@ namespace TranslationTools {
 						onLine(stamped + " choice block(s) stamped so their options stay editable once translated.");
 					}
 					List<List<string>> functions = Functions(lines, out List<string> preamble);
+					// A group is what one pair of files holds: one function each at the
+					// per-function grain, every function at the whole-script grain. The join
+					// pairs the function and dialogue lists by position either way.
+					List<List<List<string>>> groups = new();
+					if (wholeScript == true && functions.Count > 0) {
+						groups.Add(functions);
+					}
+					if (wholeScript == false) {
+						foreach (List<string> function in functions) {
+							List<List<string>> one = new();
+							one.Add(function);
+							groups.Add(one);
+						}
+					}
 					Directory.CreateDirectory(Path.Combine(splitFolder, DialoguesFolder));
 					Directory.CreateDirectory(Path.Combine(splitFolder, FunctionsFolder));
 					File.WriteAllLines(Path.Combine(splitFolder, PreambleFile), preamble, ScriptEncoding);
@@ -89,11 +107,14 @@ namespace TranslationTools {
 					List<ChoiceLocation> choices = new();
 					int dialogueLines = 0;
 					int emptyFiles = 0;
-					foreach (List<string> function in functions) {
-						string label = LabelOf(function[0]);
+					foreach (List<List<string>> group in groups) {
+						string label = LabelOf(group[0][0]);
+						if (wholeScript == true) {
+							label = WholeKey;
+						}
 						string functionKey = Path.Combine(FunctionsFolder, label + ".txt");
 						string dialogueKey = Path.Combine(DialoguesFolder, label + ".txt");
-						int held = WriteFunction(function, label, Path.Combine(splitFolder, functionKey), Path.Combine(splitFolder, dialogueKey), choices);
+						int held = WriteFunctions(group, label, Path.Combine(splitFolder, functionKey), Path.Combine(splitFolder, dialogueKey), choices);
 						dialogueLines += held;
 						if (held == 0) {
 							// Nothing to translate in it: the file stays, since the join pairs the
@@ -112,7 +133,7 @@ namespace TranslationTools {
 					string checkpointFolder = Path.GetDirectoryName(Path.GetFullPath(splitFolder)) ?? splitFolder;
 					ChoiceLocations.Write(checkpointFolder, choices);
 					onLine("Split " + functions.Count + " functions, " + dialogueLines + " dialogue lines, " + preamble.Count + " preamble lines.");
-					onLine((functions.Count - emptyFiles) + " dialogue file(s) hold text; " + emptyFiles + " hold none and sit in " + DialoguesFolder + "\\" + EmptyFolder + "\\.");
+					onLine((groups.Count - emptyFiles) + " dialogue file(s) hold text; " + emptyFiles + " hold none and sit in " + DialoguesFolder + "\\" + EmptyFolder + "\\.");
 					onLine(choices.Count + " choice block(s); where they are is in " + ChoiceLocations.FileName + ".");
 				}
 				catch (Exception exception) {
@@ -244,82 +265,88 @@ namespace TranslationTools {
 
 
 		/// <summary>
-		/// Writes one function's two files.
+		/// Writes one group of functions into one pair of files: each function's header line
+		/// goes into both, its body is cut into code and entries, and the index runs on
+		/// across the group. One function per group is the per-function grain; every
+		/// function in one group is the whole script.
 		/// </summary>
-		/// <param name="function">The function's lines, header first.</param>
-		/// <param name="label">The function's label, which keys both files.</param>
+		/// <param name="group">The functions, each with its header line first.</param>
+		/// <param name="label">The key both files are named by.</param>
 		/// <param name="functionPath">Where the code goes.</param>
 		/// <param name="dialoguePath">Where the entries go.</param>
 		/// <param name="choices">Receives one location per choice block found.</param>
-		/// <returns>How many dialogue lines it held.</returns>
-		private static int WriteFunction(List<string> function, string label, string functionPath, string dialoguePath, List<ChoiceLocation> choices) {
+		/// <returns>How many dialogue lines the group held.</returns>
+		private static int WriteFunctions(List<List<string>> group, string label, string functionPath, string dialoguePath, List<ChoiceLocation> choices) {
 			int index = 0;
 			using (StreamWriter code = new(functionPath, false, ScriptEncoding)) {
 				using (StreamWriter dialogue = new(dialoguePath, false, ScriptEncoding)) {
-					code.WriteLine(function[0]);
-					dialogue.WriteLine(function[0]);
-					bool inChoices = false;
-					ChoiceLocation? block = null;
-					for (int at = 1; at < function.Count; at++) {
-						string line = function[at];
-						// Inside a stamped choice block a line holding a quoted option is an
-						// entry VERBATIM, code riding along, with the engine's English mode
-						// opened and closed inside each option's quotes. The opener and the
-						// stamps themselves are code. Each block is noted for checkpoint.choices.
-						if (line.Trim() == ChoiceStart) {
-							inChoices = true;
-							block = new ChoiceLocation();
-							block.FileKey = label;
-						}
-						if (line.Trim() == ChoiceEnd) {
-							inChoices = false;
-							if (block != null && block.Options > 0) {
-								choices.Add(block);
+					foreach (List<string> function in group) {
+						code.WriteLine(function[0]);
+						dialogue.WriteLine(function[0]);
+						bool inChoices = false;
+						ChoiceLocation? block = null;
+						for (int at = 1; at < function.Count; at++) {
+							string line = function[at];
+							// Inside a stamped choice block a line holding a quoted option is an
+							// entry VERBATIM, code riding along, with the engine's English mode
+							// opened and closed inside each option's quotes. The opener and the
+							// stamps themselves are code. Each block is noted for checkpoint.choices.
+							if (line.Trim() == ChoiceStart) {
+								inChoices = true;
+								block = new ChoiceLocation();
+								block.FileKey = label;
 							}
-							block = null;
-						}
-						if (inChoices == true && block != null && block.Command.Length == 0) {
-							block.Command = ChoiceCommandOf(line);
-						}
-						bool choiceOption = inChoices == true && line.Contains('"') == true && line.Trim() != ChoiceStart;
-						if (choiceOption == true) {
-							string pointer = PointerFor(index);
-							dialogue.WriteLine(pointer + WrapOptions(line));
-							code.WriteLine(pointer);
-							if (block != null) {
-								if (block.Options == 0) {
-									block.FirstIndex = index;
+							if (line.Trim() == ChoiceEnd) {
+								inChoices = false;
+								if (block != null && block.Options > 0) {
+									choices.Add(block);
 								}
-								block.LastIndex = index;
-								// Options are quoted strings; a one-line form holds several on one line.
-								int quotes = 0;
-								foreach (char character in line) {
-									if (character == '"') {
-										quotes += 1;
+								block = null;
+							}
+							if (inChoices == true && block != null && block.Command.Length == 0) {
+								block.Command = ChoiceCommandOf(line);
+							}
+							bool choiceOption = inChoices == true && line.Contains('"') == true && line.Trim() != ChoiceStart;
+							if (choiceOption == true) {
+								string pointer = PointerFor(index);
+								dialogue.WriteLine(pointer + WrapOptions(line));
+								code.WriteLine(pointer);
+								if (block != null) {
+									if (block.Options == 0) {
+										block.FirstIndex = index;
 									}
+									block.LastIndex = index;
+									// Options are quoted strings; a one-line form holds several on one line.
+									int quotes = 0;
+									foreach (char character in line) {
+										if (character == '"') {
+											quotes += 1;
+										}
+									}
+									block.Options += quotes / 2;
 								}
-								block.Options += quotes / 2;
+								index += 1;
 							}
-							index += 1;
-						}
-						if (choiceOption == false && (inChoices == true || IsDialogue(line) == false)) {
-							code.WriteLine(line);
-						}
-						if (choiceOption == false && inChoices == false && IsDialogue(line) == true) {
-							string pointer = PointerFor(index);
-							string text = "`" + line.Replace("`", "");
-							string tail = "";
-							int slash = text.IndexOf('\\');
-							if (slash >= 0) {
-								tail = text.Substring(slash);
-								text = text.Substring(0, slash);
+							if (choiceOption == false && (inChoices == true || IsDialogue(line) == false)) {
+								code.WriteLine(line);
 							}
-							text = NametagToFront(text);
-							// A select line's text opens with a quote; the backtick goes inside it.
-							text = text.Replace("`\"", "\"`");
-							dialogue.WriteLine(pointer + text);
-							code.WriteLine(pointer + tail);
-							index += 1;
+							if (choiceOption == false && inChoices == false && IsDialogue(line) == true) {
+								string pointer = PointerFor(index);
+								string text = "`" + line.Replace("`", "");
+								string tail = "";
+								int slash = text.IndexOf('\\');
+								if (slash >= 0) {
+									tail = text.Substring(slash);
+									text = text.Substring(0, slash);
+								}
+								text = NametagToFront(text);
+								// A select line's text opens with a quote; the backtick goes inside it.
+								text = text.Replace("`\"", "\"`");
+								text = WrapVariables(text);
+								dialogue.WriteLine(pointer + text);
+								code.WriteLine(pointer + tail);
+								index += 1;
+							}
 						}
 					}
 				}
@@ -437,6 +464,63 @@ namespace TranslationTools {
 			bool commaBefore = previous.TrimEnd(' ', '\t').EndsWith(",", StringComparison.Ordinal);
 			bool optionNext = line.TrimStart(' ', '\t').StartsWith("\"", StringComparison.Ordinal);
 			return commaBefore == true || optionNext == true;
+		}
+
+
+		/// <summary>
+		/// Puts every variable in a dialogue line outside the backtick mode. The split opens
+		/// English mode with one backtick at the front of the text, and inside that mode the
+		/// engine shows "$2" as the two characters rather than the string variable's value.
+		/// Each $name or %name is therefore closed off with a backtick before it and reopened
+		/// with one after it, empty runs between two backticks are dropped, and a backtick
+		/// left dangling at the end goes: "`$2は逃げ出した！" becomes "$2`は逃げ出した！", and
+		/// "`abc$2def" becomes "`abc`$2`def". Runs on the original text at split only.
+		/// </summary>
+		/// <param name="text">The dialogue text, backtick in front, nametag already moved.</param>
+		public static string WrapVariables(string text) {
+			StringBuilder wrapped = new();
+			bool mode = false;
+			int at = 0;
+			while (at < text.Length) {
+				char current = text[at];
+				bool variable = (current == '$' || current == '%') && at + 1 < text.Length && IsVariableChar(text[at + 1]);
+				if (current == '`') {
+					mode = mode == false;
+					wrapped.Append(current);
+					at += 1;
+				}
+				if (current != '`' && variable == true) {
+					// A numbered variable is digits only; a named one, an alias, is a word
+					// that starts with a letter. "$2def" is $2 followed by text.
+					bool numbered = text[at + 1] >= '0' && text[at + 1] <= '9';
+					int end = at + 1;
+					while (end < text.Length && IsVariableChar(text[end]) == true && (numbered == false || (text[end] >= '0' && text[end] <= '9'))) {
+						end += 1;
+					}
+					if (mode == true) {
+						wrapped.Append('`');
+					}
+					wrapped.Append(text, at, end - at);
+					if (mode == true) {
+						wrapped.Append('`');
+					}
+					at = end;
+				}
+				if (current != '`' && variable == false) {
+					wrapped.Append(current);
+					at += 1;
+				}
+			}
+			string result = wrapped.ToString().Replace("``", "");
+			if (result.EndsWith("`", StringComparison.Ordinal) == true) {
+				result = result.Substring(0, result.Length - 1);
+			}
+			return result;
+		}
+
+
+		private static bool IsVariableChar(char character) {
+			return (character >= '0' && character <= '9') || (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || character == '_';
 		}
 
 

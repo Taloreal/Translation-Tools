@@ -124,7 +124,8 @@ namespace TranslationTools {
 			foreach (string line in File.ReadAllLines(path, NScripterSplit.ScriptEncoding)) {
 				if (NScripterSplit.TryReadPointer(line, out string pointer, out int index, out string text) == true) {
 					if (entries.ContainsKey(index) == false) {
-						entries.Add(index, text);
+						// A standalone name line's marker is for the translator; it never reaches the script.
+						entries.Add(index, NametagConvention.StripMarker(text));
 					}
 				}
 			}

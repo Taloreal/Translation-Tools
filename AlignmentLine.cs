@@ -25,6 +25,12 @@ namespace TranslationTools {
 
 		/// <summary>The words alone: no nametag, no structural quotes, no engine control characters.</summary>
 		public string Bare = "";
+
+		/// <summary>Standalone kind only: this line IS a speaker's name, naming the line after it; it has no words of its own.</summary>
+		public bool IsTagLine = false;
+
+		/// <summary>Standalone kind only: the index of the tag line that names this line, or -1 when none does.</summary>
+		public int TagIndex = -1;
 	}
 
 
@@ -82,16 +88,35 @@ namespace TranslationTools {
 		/// <param name="convention">How this file tags its speaker, or null for none known.</param>
 		public static List<AlignmentLine> Read(string dialoguePath, NametagConvention? convention) {
 			List<AlignmentLine> lines = new();
+			AlignmentLine? pendingTag = null;
 			foreach (string raw in NScripterSplit.ReadLines(dialoguePath)) {
 				if (NScripterSplit.TryReadPointer(raw, out string pointer, out int index, out string rest) == true) {
 					AlignmentLine line = new();
 					line.Index = index;
 					line.Text = rest;
-					if (convention != null && convention.Matches(rest, out string name) == true) {
+					bool standalone = convention != null && convention.Standalone == true;
+					if (standalone == false && convention != null && convention.Matches(rest, out string name) == true) {
 						line.HasNametag = true;
 						line.Name = name;
 					}
+					if (standalone == true && convention!.Matches(rest, out string lineName) == true) {
+						// The standalone kind: this line is the name, and the next line is the
+						// one it names. The tag line has no words; the named line carries the
+						// speaker and remembers which line gave it.
+						line.IsTagLine = true;
+						line.Name = lineName;
+						pendingTag = line;
+					}
+					if (standalone == true && line.IsTagLine == false && pendingTag != null) {
+						line.HasNametag = true;
+						line.Name = pendingTag.Name;
+						line.TagIndex = pendingTag.Index;
+						pendingTag = null;
+					}
 					line.Bare = BareText(rest, convention);
+					if (line.IsTagLine == true) {
+						line.Bare = "";
+					}
 					lines.Add(line);
 				}
 			}

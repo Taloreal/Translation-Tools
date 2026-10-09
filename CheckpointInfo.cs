@@ -19,6 +19,7 @@ namespace TranslationTools {
 		private const string VndbIdName = "VndbId";
 		private const string BuiltWithName = "BuiltWith";
 		private const string SpeakerTagName = "SpeakerTag";
+		private const string SplitModeName = "SplitMode";
 
 
 		/// <summary>
@@ -57,6 +58,9 @@ namespace TranslationTools {
 						}
 						if (name == SpeakerTagName) {
 							info.SpeakerTag = value;
+						}
+						if (name == SplitModeName) {
+							info.SplitMode = value;
 						}
 					}
 				}
@@ -120,6 +124,13 @@ namespace TranslationTools {
 		/// </summary>
 		public string SpeakerTag = "";
 
+		/// <summary>
+		/// How the split was cut, written by Split: "function" for one dialogue file per
+		/// function or label, "whole" for the whole script (one per scene on Siglus). Empty
+		/// for a checkpoint split before the grain existed, which was cut per function.
+		/// </summary>
+		public string SplitMode = "";
+
 
 		/// <summary>
 		/// Writes the file at the top of a checkpoint's folder, replacing what was there.
@@ -132,7 +143,8 @@ namespace TranslationTools {
 				string text = GameNameName + "=" + GameName + Environment.NewLine
 					+ VndbIdName + "=" + VndbId + Environment.NewLine
 					+ BuiltWithName + "=" + BuiltWith + Environment.NewLine
-					+ SpeakerTagName + "=" + SpeakerTag + Environment.NewLine;
+					+ SpeakerTagName + "=" + SpeakerTag + Environment.NewLine
+					+ SplitModeName + "=" + SplitMode + Environment.NewLine;
 				File.WriteAllText(Path.Combine(folder, FileName), text);
 			}
 			catch (Exception exception) {

@@ -26,6 +26,25 @@ namespace TranslationTools {
 		/// <summary>Without a glossary, the fewest different names that must each appear at least twice: twice the glossary proof's speakers.</summary>
 		public const int LeastRepeatingSpeakers = 4;
 
+		/// <summary>The stored word for the standalone kind: the tag is a whole line holding only the name, above the line it names.</summary>
+		public const string LineKind = "line";
+
+		/// <summary>
+		/// What conform appends to a standalone tag line in the dialogue file so a translator
+		/// sees it is a name: an engine comment, so it is harmless should it ever leak into
+		/// a script, and stripped by every reader and by the join before text goes back.
+		/// </summary>
+		public const string LineMarker = " ;<NAMETAG>";
+
+		/// <summary>
+		/// True for the standalone kind: no opener and closer; a line whose whole text is one
+		/// of the glossary's names (Cast) is a tag line, naming the line after it.
+		/// </summary>
+		public bool Standalone = false;
+
+		/// <summary>For the standalone kind: every name the glossary knows, any character, any form.</summary>
+		public List<string> Cast = new();
+
 		/// <summary>The character the tag opens with.</summary>
 		public char Opener = ' ';
 
@@ -52,6 +71,38 @@ namespace TranslationTools {
 
 
 		/// <summary>
+		/// The standalone kind with a cast: names are the glossary's, read when the
+		/// convention is made for a checkpoint.
+		/// </summary>
+		public static NametagConvention Line(List<CharacterEntry> characters) {
+			NametagConvention convention = new();
+			convention.Standalone = true;
+			convention.ModelVerdict = "stored";
+			foreach (CharacterEntry entry in characters) {
+				foreach (string name in entry.Names) {
+					if (CharacterEntry.Contains(convention.Cast, name) == false) {
+						convention.Cast.Add(name);
+					}
+				}
+			}
+			return convention;
+		}
+
+
+		/// <summary>
+		/// A dialogue line's text without the standalone marker, if it carries one.
+		/// </summary>
+		public static string StripMarker(string text) {
+			string stripped = text;
+			string trimmed = text.TrimEnd();
+			if (trimmed.EndsWith(LineMarker.Trim(), StringComparison.Ordinal) == true) {
+				stripped = trimmed.Substring(0, trimmed.Length - LineMarker.Trim().Length).TrimEnd();
+			}
+			return stripped;
+		}
+
+
+		/// <summary>
 		/// The convention TGD uses, taken as read under the TGD switch.
 		/// </summary>
 		public static NametagConvention Tgd() {
@@ -73,8 +124,13 @@ namespace TranslationTools {
 				convention = Tgd();
 			}
 			if (TgdFeatures.Enabled == false) {
-				CheckpointInfo info = CheckpointInfo.Load(CheckpointInspector.FolderOf(checkpoint.Path));
+				string folder = CheckpointInspector.FolderOf(checkpoint.Path);
+				CheckpointInfo info = CheckpointInfo.Load(folder);
 				convention = FromStored(info.SpeakerTag);
+				if (convention != null && convention.Standalone == true) {
+					// The standalone kind's names are the glossary's: read them now, once.
+					convention = Line(Glossary.Characters(folder));
+				}
 			}
 			return convention;
 		}
@@ -86,7 +142,12 @@ namespace TranslationTools {
 		/// </summary>
 		public static NametagConvention? FromStored(string stored) {
 			NametagConvention? convention = null;
-			if (stored.Length == 2) {
+			if (string.Equals(stored, LineKind, StringComparison.Ordinal) == true) {
+				convention = new NametagConvention();
+				convention.Standalone = true;
+				convention.ModelVerdict = "stored";
+			}
+			if (convention == null && stored.Length == 2) {
 				convention = new NametagConvention();
 				convention.Opener = stored[0];
 				convention.Closer = stored[1];
@@ -96,9 +157,15 @@ namespace TranslationTools {
 		}
 
 
-		/// <summary>The two tag characters as the checkpoint stores them.</summary>
+		/// <summary>The two tag characters as the checkpoint stores them, or the standalone kind's word.</summary>
 		public string Stored {
-			get { return Opener.ToString() + Closer.ToString(); }
+			get {
+				string stored = Opener.ToString() + Closer.ToString();
+				if (Standalone == true) {
+					stored = LineKind;
+				}
+				return stored;
+			}
 		}
 
 
@@ -202,7 +269,15 @@ namespace TranslationTools {
 			name = "";
 			bool matches = false;
 			string trimmed = text.TrimStart();
-			if (trimmed.Length > 0 && trimmed[0] == Opener) {
+			if (Standalone == true) {
+				// The whole line is the tag when it is one of the cast's names, marker or no marker.
+				string bare = StripMarker(trimmed).Trim();
+				if (bare.Length > 0 && CharacterEntry.Contains(Cast, bare) == true) {
+					name = bare;
+					matches = true;
+				}
+			}
+			if (Standalone == false && trimmed.Length > 0 && trimmed[0] == Opener) {
 				int close = trimmed.IndexOf(Closer, 1);
 				if (close > 0) {
 					name = trimmed.Substring(1, close - 1).Trim().Trim('"').Trim();
@@ -232,6 +307,9 @@ namespace TranslationTools {
 			}
 			if (ModelVerdict == "stored") {
 				text = Opener + "Name" + Closer + " (learned earlier)";
+			}
+			if (Standalone == true) {
+				text = "a name on its own line, above the line it names (" + Cast.Count + " names from the glossary)";
 			}
 			if (ModelVerdict.Length == 0 && ModelReason.Length > 0) {
 				text += ", model not asked (" + ModelReason + ")";

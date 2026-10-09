@@ -133,14 +133,24 @@ overwrite them, or cancel.
 ### Split - extract\ to split\
 
 Cuts the script into one file per section, with the dialogue separated from the code so
-you can edit text without touching the script around it.
+you can edit text without touching the script around it. What a section is depends on
+the **Split grain** setting (section 10): one file per function or label, the default,
+or the whole script in one (one per scene file on SiglusEngine), for a sparse game.
+Everything below describes the per-function grain; the whole-script grain makes the
+same files, just one pair of them, keyed `script` on NScripter and by the scene's name
+on SiglusEngine.
 
 - NScripter: `split\dialogues\` holds the lines, `split\functions\` holds the code, and two
   key files list them in order. Every function gets a dialogue file, since the join pairs
   the two lists by position, but a function with no dialogue at all gets its file under
   `split\dialogues\empty\`, so `dialogues\` itself is the list of files that need a
   translator; the split reports the two counts, and the tool's own pickers and scans
-  never look inside `empty\`. A choice menu in the engine's standard form, a `select`,
+  never look inside `empty\`. A dialogue line's text opens with a backtick, the engine's
+  English mode, and a variable inside that mode is shown as its name rather than its
+  value, so the split puts every `$name` or `%name` outside the mode: `$2は逃げ出した！`
+  becomes `$2`は逃げ出した！` and a variable in the middle of a line gets a closing and an
+  opening backtick around it. Keep that shape when you translate: the variable sits
+  between backticks, the words sit after one. A choice menu in the engine's standard form, a `select`,
   `selgosub`, `selnum` or `csel` command with its quoted options, is stamped with
   `;start choices` and `;end choices`, and each option line goes into the dialogue file
   with its `,*label` riding along so you can see it is a choice, and every option gets the
@@ -663,6 +673,29 @@ Nothing is added all at once: every name is a decision about who it is. A name j
 character conforms the files like any other names change (above). A clash with a third
 character is refused by name. Back on the list ends the pass; run it again any time, and
 only names still unknown are listed.
+
+**Standalone name lines.** Some games mark no speaker at all: the name stands on its own
+line above the text, shown at the top of the box, and looks no different from a line of
+narration. There is no format to learn, so the third learner works from one fact: a name
+is the one kind of line a script repeats byte for byte, hundreds of times. It counts every
+dialogue line across the files, drops the ones seen once, and walks the rest from the
+most frequent down, with the glossary answering for names it already knows and the model
+asked about each other line, one line per call, "is this nothing but a character's name".
+Names sit at the top of that list, so the walk stops once at least the set number of lines
+has been considered and the share of names among them has fallen under the set percent;
+the defaults, thirty-three and ninety, are under the submenu's **Settings** row. The
+minimum is higher than a cast because a game's habits, three beat lines of dots say, sit
+among the names and must not end the walk early; the bar is high because the share falls
+under it within a handful of lines once the names run out. Nothing is skipped on shape:
+the model reads each line as a reader would. The names found that the glossary lacks are
+presented to settle one at a time exactly as the names pass does, and once any were added
+the tool offers to make "a name on its own line" the checkpoint's speaker tag. From then
+on a line whose whole text is one of the glossary's names is a tag line: it names the
+line after it, it keeps its own index and stays its own entry, and conform appends
+` ;<NAMETAG>` to it so a translator sees at once what it is. The marker is an engine
+comment, harmless should it ever leak, and the join strips it before text goes back. A
+speaker repair can rename such a line but never remove or add one, since that would
+delete or insert a line.
 - **Copy this glossary to another checkpoint** - pick the target; its own glossary is
   replaced after a question that says what it loses.
 - **Take the glossary from a checkpoint of the same game** - finds another checkpoint of
@@ -693,6 +726,17 @@ Extract asks the game on both engines now, so every checkpoint can carry one.
 - **Game installs...** - every installed game the tool knows: its folder, what starts it,
   and which checkpoints use it. Change the starter program or its arguments, or remove an
   install; the checkpoints that used it will ask again.
+- **Split grain** - how finely Split cuts a script, read at the moment a split runs: one
+  dialogue file per function or label, or the whole script in one (one per scene file on
+  SiglusEngine). Left or Right flips it. Two grains and no middle, on purpose: a
+  function is a boundary the game's author drew and the whole script is the game
+  itself, while anything between would be a grouping the tool invented, and unrelated
+  functions gathered by a count read worse than either. Pick per function for a dense
+  game whose sections are scenes, and the whole script for a sparse one whose
+  functions hold a line or three and give no context on their own. The choice is
+  written into the checkpoint's info as `SplitMode`; changing it means a fresh split.
+  Two checkpoints you mean to align should be cut at the same grain, since a pair is
+  one file against one file.
 - **Language model...** - the model the tool asks for help with alignment and, later,
   translation. Any OpenAI-compatible endpoint works: KoboldCpp on your own machine (the
   built-in address, `http://localhost:5001`), or a hosted backend with an API key. Each
