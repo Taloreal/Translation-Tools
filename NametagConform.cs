@@ -130,10 +130,11 @@ namespace TranslationTools {
 					bool differs = string.Equals(name, entry.Written, StringComparison.Ordinal) == false;
 					if (convention.Standalone == true) {
 						// The whole line is the tag: it becomes the written name plus the marker
-						// that tells a translator what it is, marker added where it was missing.
-						bool unmarked = rest.TrimEnd().EndsWith(NametagConvention.LineMarker.Trim(), StringComparison.Ordinal) == false;
+						// that tells a translator what it is, marker added where it was missing;
+						// the backtick ahead of the name and the quotes about it stay as they were.
+						bool unmarked = NametagConvention.HasMarker(rest) == false;
 						if (differs == true || unmarked == true) {
-							result = pointer + entry.Written + NametagConvention.LineMarker;
+							result = pointer + NametagConvention.TagLine(rest, entry.Written, quoteNames);
 						}
 					}
 					if (convention.Standalone == false && differs == true) {
@@ -250,9 +251,10 @@ namespace TranslationTools {
 				quoted = "\"" + newName + "\"";
 			}
 			if (convention.Standalone == true) {
-				// A tag line is nothing but the name: the whole line is replaced, marker and all.
+				// A tag line is nothing but the name: the name is replaced, the marker written,
+				// and the backtick or quotes around the old name kept around the new.
 				if (newName.Length > 0) {
-					result = newName + NametagConvention.LineMarker;
+					result = NametagConvention.TagLine(rest, newName, quoteNames);
 				}
 			}
 			string name = "";

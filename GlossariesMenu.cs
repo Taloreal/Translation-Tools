@@ -313,9 +313,10 @@ namespace TranslationTools {
 		/// names it has. The names themselves are in the full view, so the written one is
 		/// never lost among them.
 		/// </summary>
-		private static List<string> Rows(List<CharacterEntry> entries) {
+		/// <param name="entries">The characters, in the order to show.</param>
+		/// <param name="lines">Lines spoken, by written name, from LineCounts.</param>
+		private static List<string> Rows(List<CharacterEntry> entries, Dictionary<string, int> lines) {
 			List<string> rows = new();
-			Dictionary<string, int> lines = LineCounts(entries);
 			foreach (CharacterEntry entry in entries) {
 				int others = entry.Others().Count;
 				string count = "no other name";
@@ -531,14 +532,22 @@ namespace TranslationTools {
 
 
 		/// <summary>
-		/// A paged pick over the characters, or null for Back.
+		/// A paged pick over the characters, or null for Back. The picker's sort row orders
+		/// them by written name or by lines spoken; the order chosen is saved for next time.
 		/// </summary>
 		private static CharacterEntry? Pick(string question) {
 			CharacterEntry? picked = null;
 			List<CharacterEntry> entries = Glossary.Characters(GlossariesMenu.SelectedFolder());
-			int index = PagedPicker.Pick(Rows(entries), question);
+			Dictionary<string, int> lines = LineCounts(entries);
+			List<CharacterEntry> ordered = entries;
+			Func<int, List<string>> rowsFor = (mode) => {
+				ordered = CharacterSort.Order(entries, lines, mode);
+				return Rows(ordered, lines);
+			};
+			int index = PagedPicker.Pick(CharacterSort.Modes, CharacterSort.Mode, rowsFor, question, out int pickedMode);
+			CharacterSort.Mode = pickedMode;
 			if (index >= 0) {
-				picked = entries[index];
+				picked = ordered[index];
 			}
 			return picked;
 		}

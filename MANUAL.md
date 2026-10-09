@@ -560,7 +560,10 @@ is written bare.
 
 - **Characters...** - list, add, change, remove, remove every character. The list shows
   each character's written name, how many other names it has, and how many dialogue
-  lines it speaks in this checkpoint once a speaker tag is learned. Adding takes
+  lines it speaks in this checkpoint once a speaker tag is learned. A **Sort** row above
+  the list reads `Sort: <- by name ->` and flips to `by lines` on Left, Right or Enter:
+  by name is the written name, by lines is the most-spoken character first. The sort is
+  saved and every character pick opens in it. Adding takes
   the names on one comma-separated line, then asks which one the translation writes
   when there is more than one. Changing a character opens its fields; **Names** is its
   own small menu: add a name (offered as the written one, starting at no), respell a
@@ -687,15 +690,34 @@ the defaults, thirty-three and ninety, are under the submenu's **Settings** row.
 minimum is higher than a cast because a game's habits, three beat lines of dots say, sit
 among the names and must not end the walk early; the bar is high because the share falls
 under it within a handful of lines once the names run out. Nothing is skipped on shape:
-the model reads each line as a reader would. The names found that the glossary lacks are
+the model reads each line as a reader would, and with what a reader would have: when
+every line after a line opens a quotation, 「, 『, a double or single quote of any style,
+the question says so and shows one of them, so a bare name is not judged from one word
+alone. Of the names the model confirms, those are the ones that go straight into the
+glossary under the script's own name. Only a speaker's name is always followed by speech,
+and that rule settles most of a cast without a question. The names left, the ones the glossary lacks and the rule does not cover, are
 presented to settle one at a time exactly as the names pass does, and once any were added
-the tool offers to make "a name on its own line" the checkpoint's speaker tag. From then
-on a line whose whole text is one of the glossary's names is a tag line: it names the
-line after it, it keeps its own index and stays its own entry, and conform appends
-` ;<NAMETAG>` to it so a translator sees at once what it is. The marker is an engine
-comment, harmless should it ever leak, and the join strips it before text goes back. A
-speaker repair can rename such a line but never remove or add one, since that would
-delete or insert a line.
+the tool offers to make "a name on its own line" the checkpoint's speaker tag.
+From then on a line whose whole text is one of the glossary's names is a tag line: it
+names the line after it, it keeps its own index and stays its own entry, and conform
+appends ` ;<NAMETAG>` to it so a translator sees at once what it is. The marker is an
+engine comment, harmless should it ever leak, and the join strips it before text goes
+back. A speaker repair can rename such a line but never remove or add one, since that
+would delete or insert a line.
+
+What stands around the name is not the name. On NScripter a name line usually opens with
+a backtick, `` `ボク ``, because the engine will not draw Latin letters without one; on
+Siglus the line is a quoted literal, `"ボク"`. The learner, the matcher, conform and the
+repair all look past the backtick and the quotes and put them back when they write, so
+`` `ボク `` becomes `` `Me ;<NAMETAG> `` and `"ボク"` becomes `"Me" ;<NAMETAG>`, and the
+name still displays in game. Do the renaming through the Characters menu rather than by
+find-and-replace in a text editor: conform knows every name a character goes by, writes
+the one you picked everywhere at once, and keeps the glossary and the files agreeing,
+where a hand replace misses a spelling or catches a name inside a word.
+
+The marker also works the other way. A line you append ` ;<NAMETAG>` to by hand is a tag
+line whatever it says, in the glossary or not, so a name the learner missed can be marked
+in the file, and the names pass then offers it like any other tag it found.
 - **Copy this glossary to another checkpoint** - pick the target; its own glossary is
   replaced after a question that says what it loses.
 - **Take the glossary from a checkpoint of the same game** - finds another checkpoint of

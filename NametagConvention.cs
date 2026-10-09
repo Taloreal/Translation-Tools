@@ -36,9 +36,14 @@ namespace TranslationTools {
 		/// </summary>
 		public const string LineMarker = " ;<NAMETAG>";
 
+		/// <summary>NScripter's text-mode mark; a name line may open with it and keeps it.</summary>
+		public const string TextMode = "`";
+
 		/// <summary>
 		/// True for the standalone kind: no opener and closer; a line whose whole text is one
-		/// of the glossary's names (Cast) is a tag line, naming the line after it.
+		/// of the glossary's names (Cast), or any line carrying the marker, is a tag line,
+		/// naming the line after it. A backtick ahead of the name is NScripter's text mode,
+		/// not part of the name, and stays on the line through every rewrite.
 		/// </summary>
 		public bool Standalone = false;
 
@@ -95,10 +100,74 @@ namespace TranslationTools {
 		public static string StripMarker(string text) {
 			string stripped = text;
 			string trimmed = text.TrimEnd();
-			if (trimmed.EndsWith(LineMarker.Trim(), StringComparison.Ordinal) == true) {
+			if (HasMarker(trimmed) == true) {
 				stripped = trimmed.Substring(0, trimmed.Length - LineMarker.Trim().Length).TrimEnd();
 			}
 			return stripped;
+		}
+
+
+		/// <summary>
+		/// Whether a line's text ends with the standalone marker.
+		/// </summary>
+		public static bool HasMarker(string text) {
+			return text.TrimEnd().EndsWith(LineMarker.Trim(), StringComparison.Ordinal);
+		}
+
+
+		/// <summary>
+		/// What a standalone line says once its marker, a leading backtick (NScripter's text
+		/// mode) and the quotes around it (Siglus) are set aside: the name, for a tag line;
+		/// the words, for any other. Empty for a bare backtick or empty quotes.
+		/// </summary>
+		public static string LineName(string text) {
+			string name = StripMarker(text).Trim();
+			if (name.StartsWith(TextMode) == true) {
+				name = name.Substring(1).Trim();
+			}
+			name = Unquote(name).Trim();
+			return name;
+		}
+
+
+		/// <summary>
+		/// The text inside a pair of double quotes that wraps the whole of it (a Siglus
+		/// string literal), or the text unchanged when no such pair wraps it.
+		/// </summary>
+		public static string Unquote(string text) {
+			string inner = text;
+			if (IsQuoted(text) == true) {
+				inner = text.Substring(1, text.Length - 2);
+			}
+			return inner;
+		}
+
+
+		/// <summary>
+		/// A standalone line rewritten to carry a name: whatever stood around the old name
+		/// stands around the new one, the backtick ahead of it and the quotes about it, the
+		/// marker after. On Siglus a name that had no quotes gets them.
+		/// </summary>
+		/// <param name="text">The line's text after the pointer, as it is now.</param>
+		/// <param name="name">The name to write.</param>
+		/// <param name="quoteNames">True on Siglus, where a name line is quoted.</param>
+		public static string TagLine(string text, string name, bool quoteNames) {
+			string inner = StripMarker(text).Trim();
+			string lead = "";
+			if (inner.StartsWith(TextMode) == true) {
+				lead = TextMode;
+				inner = inner.Substring(1).Trim();
+			}
+			string written = name;
+			if (quoteNames == true || IsQuoted(inner) == true) {
+				written = "\"" + name + "\"";
+			}
+			return lead + written + LineMarker;
+		}
+
+
+		private static bool IsQuoted(string text) {
+			return text.Length >= 2 && text[0] == '"' && text[text.Length - 1] == '"';
 		}
 
 
@@ -270,9 +339,11 @@ namespace TranslationTools {
 			bool matches = false;
 			string trimmed = text.TrimStart();
 			if (Standalone == true) {
-				// The whole line is the tag when it is one of the cast's names, marker or no marker.
-				string bare = StripMarker(trimmed).Trim();
-				if (bare.Length > 0 && CharacterEntry.Contains(Cast, bare) == true) {
+				// The whole line is the tag when it is one of the cast's names, or when it carries
+				// the marker, which forces it whatever the name: a translator may mark a line by
+				// hand. The backtick ahead and the quotes about the name are not the name.
+				string bare = LineName(trimmed);
+				if (bare.Length > 0 && (HasMarker(trimmed) == true || CharacterEntry.Contains(Cast, bare) == true)) {
 					name = bare;
 					matches = true;
 				}

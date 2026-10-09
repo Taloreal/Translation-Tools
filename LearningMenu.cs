@@ -30,6 +30,27 @@ namespace TranslationTools {
 
 
 	/// <summary>
+	/// What follows a repeated line across the files: how many lines came after it, and
+	/// how many of those opened a quotation. A line whose every follower opens one is a
+	/// speaker's name, since nothing else in a script is always answered by speech.
+	/// </summary>
+	public class AfterLine {
+
+		/// <summary>How many lines were seen after this one.</summary>
+		public int Total = 0;
+
+		/// <summary>How many of them opened with a quotation mark of any kind.</summary>
+		public int Quoted = 0;
+
+
+		/// <summary>True when at least one line followed and every one opened a quotation.</summary>
+		public bool AllQuoted() {
+			return Total > 0 && Quoted == Total;
+		}
+	}
+
+
+	/// <summary>
 	/// Glossaries → Learning: the two things a checkpoint learns from its own dialogue
 	/// files before any pair is made, side by side. The speaker tag is learned from one
 	/// file the user points at, confirmed once with the model and stored on the checkpoint
@@ -380,6 +401,8 @@ namespace TranslationTools {
 		private class LineJudge {
 
 			public List<CharacterEntry> Cast = new();
+			public Dictionary<string, AfterLine> After = new(StringComparer.Ordinal);
+			public Dictionary<string, List<string>> Following = new(StringComparer.Ordinal);
 			public int Known = 0;
 			public int Asked = 0;
 			public bool ModelGone = false;
@@ -398,10 +421,10 @@ namespace TranslationTools {
 					Asked++;
 					Console.WriteLine("Asking the model whether \"" + AlignmentLines.Preview(line, 60) + "\" is a name (" + Asked + ") ...");
 					string reply = LlmClient.Complete(
-						"You are given one line of text from a visual-novel script, as it was written. "
+						"You are given one line of text from a visual-novel script, as it was written, and sometimes what the script does after it. "
 						+ "Reply YES if the line is nothing but a character's name - the name a game shows above the text box to say who is speaking - "
 						+ "or NO if it is speech, narration, a sound, punctuation or anything else. One word on the first line.",
-						"Line: " + line, out string error, 0, 0);
+						Question(line), out string error, 0, 0);
 					if (error.Length > 0) {
 						failuresInARow++;
 						if (failuresInARow >= 2) {
@@ -415,6 +438,23 @@ namespace TranslationTools {
 					}
 				}
 				return name;
+			}
+
+
+			/// <summary>
+			/// The line for the model, with the evidence a reader would have: when every line
+			/// after it opens a quotation, that is said, and one such line is shown.
+			/// </summary>
+			private string Question(string line) {
+				string question = "Line: " + line;
+				if (After.ContainsKey(line) == true && After[line].AllQuoted() == true) {
+					question += "\nEvery one of the " + After[line].Total + " line(s) that follow it in the script opens a quotation";
+					if (Following.ContainsKey(line) == true && Following[line].Count > 0) {
+						question += ", for example: " + Following[line][0];
+					}
+					question += ".";
+				}
+				return question;
 			}
 		}
 
@@ -431,23 +471,37 @@ namespace TranslationTools {
 			Dictionary<string, int> counts = new(StringComparer.Ordinal);
 			Dictionary<string, HashSet<string>> files = new(StringComparer.Ordinal);
 			Dictionary<string, List<string>> following = new(StringComparer.Ordinal);
+			Dictionary<string, AfterLine> followers = new(StringComparer.Ordinal);
+			// Siglus wraps every text line in double quotes; those are the engine's, not a
+			// quotation, and are set aside before a following line is read for one.
+			bool quotedLines = CheckpointInspector.Inspect(checkpoint.Path).Engine == CheckpointEngine.Siglus;
 			List<string> keys = AlignmentLines.DialogueKeys(checkpoint);
 			keys.Sort(string.CompareOrdinal);
 			Console.WriteLine("Counting every line of " + keys.Count + " dialogue file(s) ...");
 			foreach (string key in keys) {
 				string previous = "";
 				foreach (string text in AlignmentLines.ReadTexts(AlignmentLines.DialoguePath(checkpoint, key))) {
-					string line = NametagConvention.StripMarker(text).Trim();
+					// A backtick ahead of a name (NScripter's text mode) and the quotes about it
+					// (Siglus) are not the name: they are set aside here so the glossary can answer
+					// and the model is asked about the name alone.
+					string line = NametagConvention.LineName(text);
 					if (line.Length > 0) {
 						if (counts.ContainsKey(line) == false) {
 							counts[line] = 0;
 							files[line] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 							following[line] = new List<string>();
+							followers[line] = new AfterLine();
 						}
 						counts[line]++;
 						files[line].Add(key);
 						if (previous.Length > 0 && following[previous].Count < SampleLines) {
 							following[previous].Add(line);
+						}
+						if (previous.Length > 0) {
+							followers[previous].Total++;
+							if (OpensQuotation(text, quotedLines) == true) {
+								followers[previous].Quoted++;
+							}
 						}
 						previous = line;
 					}
@@ -473,6 +527,8 @@ namespace TranslationTools {
 			if (repeated.Count > 0) {
 				LineJudge judge = new();
 				judge.Cast = Glossary.Characters(folder);
+				judge.After = followers;
+				judge.Following = following;
 				judge.ModelGone = AlignmentHints.GaveUp;
 				List<KeyValuePair<string, int>> found = WalkRepeatedLines(repeated, judge.IsName, LearningSettings.MinimumLines, LearningSettings.StopPercent,
 					out int considered, out int names, out string why);
@@ -480,13 +536,39 @@ namespace TranslationTools {
 				if (judge.ModelGone == true) {
 					Console.WriteLine("The model could not be asked, so only glossary names counted; the list is not a verdict on the rest.");
 				}
+				int before = judge.Cast.Count;
 				List<KeyValuePair<string, int>> candidates = new();
+				int taken = 0;
 				foreach (KeyValuePair<string, int> item in found) {
 					if (Glossary.Find(judge.Cast, item.Key) == null) {
-						candidates.Add(item);
+						// A name the model confirmed that every following line answers with a
+						// quotation goes straight into the glossary under the script's own name:
+						// nothing but a speaker is always followed by speech. The rest are settled by hand.
+						bool quotedAfter = followers.ContainsKey(item.Key) == true && followers[item.Key].AllQuoted() == true;
+						if (quotedAfter == true) {
+							CharacterEntry entry = new();
+							entry.Written = item.Key;
+							entry.Add(item.Key);
+							string problem = NametagConform.SaveAndConform(checkpoint, entry, "", out string report);
+							string line = item.Key + ": added; every one of the " + followers[item.Key].Total + " line(s) after it opens a quotation (" + item.Value + " line(s)).";
+							if (problem.Length > 0) {
+								line = item.Key + ": " + problem;
+								quotedAfter = false;
+							}
+							if (problem.Length == 0) {
+								taken++;
+							}
+							Console.WriteLine("  " + line);
+							CheckpointLog.Warning(folder, "Glossary", line);
+						}
+						if (quotedAfter == false) {
+							candidates.Add(item);
+						}
 					}
 				}
-				int before = judge.Cast.Count;
+				if (taken > 0) {
+					Console.WriteLine(taken + " name(s) went into the glossary on the quotations after them; " + candidates.Count + " left to settle.");
+				}
 				bool browsing = candidates.Count > 0;
 				if (candidates.Count == 0) {
 					ConsoleExt.WaitForEnter("continue");
@@ -560,6 +642,29 @@ namespace TranslationTools {
 			}
 			Console.WriteLine("Name lines conformed for " + cast.Count + " character(s); " + marked + " of them had lines to rewrite or mark.");
 		}
+
+
+		/// <summary>
+		/// Whether a dialogue line's words open with a quotation mark of any kind, Japanese
+		/// or Western. The marker and a leading backtick are set aside first; on Siglus the
+		/// double quotes that wrap the whole line are the engine's and are set aside too.
+		/// </summary>
+		/// <param name="text">The line's text after the pointer.</param>
+		/// <param name="quotedLines">True on Siglus, where every text line is a quoted literal.</param>
+		public static bool OpensQuotation(string text, bool quotedLines) {
+			string words = NametagConvention.StripMarker(text).Trim();
+			if (words.StartsWith(NametagConvention.TextMode) == true) {
+				words = words.Substring(1).Trim();
+			}
+			if (quotedLines == true) {
+				words = NametagConvention.Unquote(words).Trim();
+			}
+			return words.Length > 0 && QuotationMarks.Contains(words[0]);
+		}
+
+
+		/// <summary>The marks a quotation may open with: Japanese corner brackets, Western doubles and singles, curly and straight, full-width and the guillemets.</summary>
+		private const string QuotationMarks = "「『\"“‘'〝«‹＂＇";
 
 
 		/// <summary>

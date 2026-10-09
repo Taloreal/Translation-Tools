@@ -25,6 +25,51 @@ first, not even .NET; the tool fetches the SiglusEngine compiler itself when a S
 needs it. The manual, `MANUAL.md`, is in the zip beside the exe. The version is the
 four-part number on the release tag, `v0.1.0.0` for the first alpha.
 
+## Roadmap
+
+This tool is a rewrite, feature by feature, of an earlier console tool that is not
+published: the code exists and works, but it grew around one game's translation and is
+tied to that project's folders and to a machine with Python and other helpers already in
+place. The rewrite carries each feature over in a shape that works for any game on either
+engine, for a user with nothing installed. Until the list below is done, the old tool is
+still the one doing the day-to-day translation work.
+
+The 0.1 line is the alpha: dialogue files are healthy, cross-comparable between
+checkpoints, and build back into the game's source, so a translator gets an easier
+pipeline than editing the script files directly.
+
+Done so far:
+
+- extract, split, join, build and run for both engines, with backups by choice
+- split grain: one dialogue file per function, or one for the whole script
+- word wrap for SiglusEngine, and the text repairs that keep a Siglus script compiling
+- the glossary: characters with a list of names and a selected written name, speaker
+  rules, copying and taking between checkpoints
+- learning: the cast from VNDB, the speaker-tag shape from one file, the names pass over
+  every tag in the script, and names that stand on their own line
+- alignment between two versions of a game: pairing, the walk, apply, speaker repair,
+  and the stamps that record what matched what
+- choices stamped at split so their options are ordinary dialogue entries
+- the language model connection: endpoint, model, key, presets, test, and the two
+  languages a translation runs between
+
+Still to carry over, in this order:
+
+1. **The dialogue editor core.** Moving through files and lines, finding text, jumping to
+   a file, filtering by scene or by speaker, bookmarks, copying lines or ranges to the
+   clipboard and replacing them from it, and the writing path that puts translated text
+   back into the engine's encoding.
+2. **Scratchpads.** Per-line candidate translations from several sources, kept beside the
+   working draft, with a review step before a candidate becomes the line.
+3. **The translation gate.** A file is ready for a translation pass only when its stamps
+   still match what is on disk and its partner checkpoint is locked.
+4. **Translation passes.** Translating a range through the language model in windows with
+   context, editable prompt sections, a file summary, and a progress tracker.
+5. **Retiring the old tool** once everything above is proven in game.
+
+Behind those: the dash substitutions when text is written into a CP932 script, and a
+faster character list on very large splits.
+
 ## Building from source
 
 You need the .NET 9 SDK (https://dotnet.microsoft.com/download). Visual Studio is optional.

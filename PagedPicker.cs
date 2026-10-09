@@ -23,12 +23,35 @@ namespace TranslationTools {
 		/// <param name="backLabel">What the last row says; "Back" unless leaving means something more specific, like "Do not copy".</param>
 		/// <returns>The picked row's index, or -1.</returns>
 		public static int Pick(List<string> rows, string title, string backLabel = "Back") {
+			return Pick(new List<string>(), 0, (mode) => rows, title, out int unused, backLabel);
+		}
+
+
+		/// <summary>
+		/// Shows the rows in one of several orders and returns the index picked within the
+		/// order shown, or -1 for Back or an empty list. A "Sort: &lt;- mode -&gt;" row above
+		/// the list flips the order on Left, Right or Enter and returns to page one. Every
+		/// order lists the same items; only their places differ.
+		/// </summary>
+		/// <param name="modes">The sort row's words, one per order; empty for no sort row.</param>
+		/// <param name="mode">The order to open in.</param>
+		/// <param name="rowsFor">The rows for an order.</param>
+		/// <param name="title">Printed above the page.</param>
+		/// <param name="pickedMode">The order shown when the pick was made or Back was chosen.</param>
+		/// <param name="backLabel">What the last row says.</param>
+		/// <returns>The picked row's index in the order shown, or -1.</returns>
+		public static int Pick(List<string> modes, int mode, Func<int, List<string>> rowsFor, string title, out int pickedMode, string backLabel = "Back") {
 			int picked = -1;
+			List<string> rows = rowsFor(mode);
 			if (rows.Count == 0) {
 				Console.WriteLine("Nothing to list.");
 				ConsoleExt.WaitForEnter("continue");
 			}
-			if (rows.Count > 0) {
+			bool showing = rows.Count > 0;
+			while (showing == true) {
+				// Enter on the sort row flips the order and shows the list again; a pick or
+				// Back ends it. Left and Right on the sort row flip it in place.
+				showing = false;
 				int pages = (rows.Count + PageSize - 1) / PageSize;
 				int page = 0;
 				// A list that fits on one page gets exactly its rows and no page row; a
@@ -47,8 +70,12 @@ namespace TranslationTools {
 					slots.Add(item);
 				}
 				ConsoleMenuItem pageRow = new("");
+				ConsoleMenuItem sortRow = new("");
 				Action refresh = () => {
 					pageRow.SetText("<- Page " + (page + 1) + "/" + pages + " ->");
+					if (modes.Count > 0) {
+						sortRow.SetText("Sort: <- " + modes[mode] + " ->");
+					}
 					for (int at = 0; at < slotCount; at++) {
 						int index = page * PageSize + at;
 						string text = "";
@@ -57,6 +84,12 @@ namespace TranslationTools {
 						}
 						slots[at].SetText(text);
 					}
+				};
+				Action flip = () => {
+					mode = (mode + 1) % modes.Count;
+					rows = rowsFor(mode);
+					page = 0;
+					refresh();
 				};
 				pageRow.AddOnKeyPressAction((item, key) => {
 					int step = 0;
@@ -71,9 +104,21 @@ namespace TranslationTools {
 						refresh();
 					}
 				});
+				sortRow.AddOnKeyPressAction((item, key) => {
+					if (OperationsMenu.IsSideways(key) == true) {
+						flip();
+					}
+				});
+				sortRow.SetActionOnSelect(() => {
+					flip();
+					showing = true;
+				});
 				refresh();
 				ConsoleSelectMenu menu = new(loops: false, numbered: false, clearOnRefresh: true);
 				menu.SetPreChoiceText(title + "  (" + rows.Count + ")");
+				if (modes.Count > 0) {
+					menu.AddChoice(sortRow);
+				}
 				if (pages > 1) {
 					menu.AddChoice(pageRow);
 				}
@@ -83,6 +128,7 @@ namespace TranslationTools {
 				menu.AddChoice(new ConsoleMenuItem(backLabel));
 				menu.GetChoice();
 			}
+			pickedMode = mode;
 			return picked;
 		}
 	}
