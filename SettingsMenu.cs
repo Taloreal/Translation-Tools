@@ -139,7 +139,7 @@ namespace TranslationTools {
 		/// report holds is in the manual, not here: the tool is not its own manual.
 		/// </summary>
 		private static void AskReporting() {
-			bool allow = YesNoMenu.Ask("Send build-mode reports? (what a report holds: MANUAL.md, Settings)");
+			bool allow = YesNoMenu.Ask("Send build-mode reports? (what a report holds: MANUAL.txt, Settings)");
 			BuildModeService.ReportingAllowed = allow;
 		}
 

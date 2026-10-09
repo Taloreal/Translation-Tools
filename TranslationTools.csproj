@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <!-- Alpha. The four-part number is the release tag; bump it with each release. -->
-    <Version>0.1.2.0</Version>
+    <Version>0.1.2.1</Version>
     <AssemblyVersion>0.1.0.0</AssemblyVersion>
     <FileVersion>0.1.0.0</FileVersion>
     <Product>Translation Tools</Product>
@@ -27,7 +27,7 @@
 
   <ItemGroup>
     <!-- The user manual ships beside the exe. -->
-    <None Include="MANUAL.md" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="MANUAL.txt" CopyToOutputDirectory="PreserveNewest" />
     <!-- The compiler installer ships beside the exe so the tool can run it on a fresh machine. -->
     <None Include="Scripts\Update-SiglusSsu.ps1" CopyToOutputDirectory="PreserveNewest" />
     <None Include="Scripts\Update-SiglusSsu.bat" CopyToOutputDirectory="PreserveNewest" />
@@ -38,7 +38,7 @@
     <!-- The compiler installer is run by PowerShell, so it stays loose as well. -->
     <None Update="Scripts\Update-SiglusSsu.ps1" ExcludeFromSingleFile="true" />
     <None Update="Scripts\Update-SiglusSsu.bat" ExcludeFromSingleFile="true" />
-    <None Update="MANUAL.md" ExcludeFromSingleFile="true" />
+    <None Update="MANUAL.txt" ExcludeFromSingleFile="true" />
   </ItemGroup>
 
 </Project>
